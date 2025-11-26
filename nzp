@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -e
+
+TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+IMAGE_NAME="nzp-toolbox:latest"
+
+# Auto-build Docker image if absent.
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+    echo "[INFO] Docker image not found. Building..."
+    docker build --platform=linux/amd64 -t "$IMAGE_NAME" "$TOOLBOX_ROOT"
+    echo "-----------------------------------------"
+fi
+
+# Detect first-time setup and pull repos if needed
+if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then
+    echo "[INFO] Pulling repositories for first time use..."
+    docker run --platform=linux/amd64 --rm -it \
+        -v "$TOOLBOX_ROOT/config":/workspace/config \
+        -v "$TOOLBOX_ROOT/repos":/workspace/repos \
+        -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
+        "$IMAGE_NAME" fetch
+    echo "-----------------------------------------"
+fi
+
+# Run container with mounts and pass our arguments
+docker run --platform=linux/amd64 --rm -it \
+    -v "$TOOLBOX_ROOT/config":/workspace/config \
+    -v "$TOOLBOX_ROOT/repos":/workspace/repos \
+    -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
+    "$IMAGE_NAME" \
+    "$@"

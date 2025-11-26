@@ -1,0 +1,32 @@
+{
+    "repos": [
+        {
+            "name": "spawn-zone-tool",
+            "url": "https://github.com/nzp-team/spawn-zone-tool.git",
+            "target": "repos/spawn-zone-tool",
+            "requirements": [
+                "requirements.txt"
+            ],
+            "venv": "python_envs/spawn-zone-tool"
+        },
+        {
+            "name": "assets",
+            "url": "https://github.com/nzp-team/assets.git",
+            "target": "repos/assets"
+        },
+        {
+            "name": "qchashtablegenerator",
+            "url": "https://github.com/nzp-team/qchashtablegenerator.git",
+            "target": "repos/qchashtablegenerator",
+            "requirements": [
+                "requirements.txt"
+            ],
+            "venv": "python_envs/qchashtablegenerator"
+        },
+        {
+            "name": "quakec",
+            "url": "https://github.com/nzp-team/quakec.git",
+            "target": "repos/quakec"
+        }
+    ]
+}
