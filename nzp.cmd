@@ -28,7 +28,7 @@ set FIRSTTIME=1
 
 if %FIRSTTIME%==1 (
     echo [INFO] Pulling repositories for first time use...
-    docker run --platform=linux/amd64 --rm -it ^
+    docker run --platform=linux/amd64 --rm -i ^
         -v "%TOOLBOX_ROOT%/config:/workspace/config" ^
         -v "%TOOLBOX_ROOT%/repos:/workspace/repos" ^
         -v "%TOOLBOX_ROOT%/python_envs:/workspace/python_envs" ^
@@ -37,7 +37,7 @@ if %FIRSTTIME%==1 (
 )
 
 rem Run container with mounts and pass our arguments
-docker run --platform=linux/amd64 --rm -it ^
+docker run --platform=linux/amd64 --rm -i ^
     -v "%TOOLBOX_ROOT%/config:/workspace/config" ^
     -v "%TOOLBOX_ROOT%/repos:/workspace/repos" ^
     -v "%TOOLBOX_ROOT%/python_envs:/workspace/python_envs" ^

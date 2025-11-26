@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
@@ -15,7 +16,7 @@ fi
 # Detect first-time setup and pull repos if needed
 if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then
     echo "[INFO] Pulling repositories for first time use..."
-    docker run --platform=linux/amd64 --rm -it \
+    docker run --platform=linux/amd64 --rm -i \
         -v "$TOOLBOX_ROOT/config":/workspace/config \
         -v "$TOOLBOX_ROOT/repos":/workspace/repos \
         -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
@@ -24,7 +25,7 @@ if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" >
 fi
 
 # Run container with mounts and pass our arguments
-docker run --platform=linux/amd64 --rm -it \
+docker run --platform=linux/amd64 --rm -i \
     -v "$TOOLBOX_ROOT/config":/workspace/config \
     -v "$TOOLBOX_ROOT/repos":/workspace/repos \
     -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
