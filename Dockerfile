@@ -7,5 +7,8 @@ COPY scripts/ /opt/scripts/
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh /opt/scripts/*.sh
+RUN mkdir /workspace
+# set read,write,execute permissions for everyone, in case we don't wnat to run as root later.
+RUN chmod -R 777 /workspace /entrypoint.sh /opt/scripts
 
 ENTRYPOINT ["/entrypoint.sh"]

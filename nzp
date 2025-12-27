@@ -15,8 +15,15 @@ fi
 
 # Detect first-time setup and pull repos if needed
 if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then
+    # create misisng folders expicitly, else Docker would create them with root as owner
+    mkdir "$TOOLBOX_ROOT/repos"
+    if [ ! -d "$TOOLBOX_ROOT/python_envs" ]; then
+        mkdir "$TOOLBOX_ROOT/python_envs"
+    fi
+
     echo "[INFO] Pulling repositories for first time use..."
     docker run --platform=linux/amd64 --rm -i \
+        -u $(id -u):$(id -g) \
         -v "$TOOLBOX_ROOT/config":/workspace/config \
         -v "$TOOLBOX_ROOT/repos":/workspace/repos \
         -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
@@ -26,6 +33,7 @@ fi
 
 # Run container with mounts and pass our arguments
 docker run --platform=linux/amd64 --rm -i \
+    -u $(id -u):$(id -g) \
     -v "$TOOLBOX_ROOT/config":/workspace/config \
     -v "$TOOLBOX_ROOT/repos":/workspace/repos \
     -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
