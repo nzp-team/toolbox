@@ -23,6 +23,8 @@ if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" >
         -v "$TOOLBOX_ROOT/game":/workspace/game \
         -e TOOLBOX_HOST_OS=$(uname -s) \
         -e TOOLBOX_HOST_ARCH=$(arch) \
+        -e TOOLBOX_ROOT=$TOOLBOX_ROOT \
+        -e TOOLBOX_WINE_PATH=$(which wine) \
         "$IMAGE_NAME" fetch
     echo "-----------------------------------------"
 fi
@@ -34,6 +36,8 @@ docker run --platform=linux/amd64 --rm --shm-size=512m -i \
     -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
     -v "$TOOLBOX_ROOT/game":/workspace/game \
     -e TOOLBOX_HOST_OS=$(uname -s) \
-     -e TOOLBOX_HOST_ARCH=$(arch) \
+    -e TOOLBOX_HOST_ARCH=$(arch) \
+    -e TOOLBOX_ROOT=$TOOLBOX_ROOT \
+    -e TOOLBOX_WINE_PATH=$(which wine) \
     "$IMAGE_NAME" \
     "$@"

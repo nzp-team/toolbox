@@ -35,6 +35,7 @@ if %FIRSTTIME%==1 (
         -v "%TOOLBOX_ROOT%/game:/workspace/game" ^
         -e TOOLBOX_HOST_OS="Windows" ^
         -e TOOLBOX_HOST_ARCH="x86_64" ^
+        -e TOOLBOX_ROOT=%TOOLBOX_ROOT% ^
         %IMAGE_NAME% fetch
     echo -----------------------------------------
 )
@@ -47,6 +48,7 @@ docker run --platform=linux/amd64 --rm --shm-size=512m -i ^
     -v "%TOOLBOX_ROOT%/game:/workspace/game" ^
     -e TOOLBOX_HOST_OS="Windows" ^
     -e TOOLBOX_HOST_ARCH="x86_64" ^
+    -e TOOLBOX_ROOT=%TOOLBOX_ROOT% ^
     %IMAGE_NAME% %*
 
 endlocal

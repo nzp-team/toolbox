@@ -107,12 +107,3 @@ unzip -o "${ROOT}/game.zip" -d "${ROOT}/game"
 rm -rf "${ROOT}/game.zip"
 
 echo "[INFO] Done downloading NZ:P release."
-
-echo ""
-echo "[INFO] ================================"
-echo "[INFO] NZ:P Toolbox does not install TrenchBroom for you"
-echo "[INFO] due to host machine dependenacies. Install TrenchBroom"
-echo "[INFO] 2024.1 and do the following:"
-echo "[INFO] - Copy [repos/trenchbroom-profiles] to [games/]"
-echo "[INFO]   in TrenchBroom configuration directory."
-echo "[INFO] ================================"
