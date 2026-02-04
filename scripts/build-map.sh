@@ -4,6 +4,13 @@
 # @usage nzp build [--map map_name] [--full]
 set -e
 
+# Users will probably try to build a map before building WADs,
+# so check if zhlt exists and build the WADs for them if it doesn't.
+if [ ! -f "/workspace/repos/assets/source/textures/wad/zhlt.wad" ]; then
+    echo "[INFO]: WADs do not exist in assets repository, building them for you.."
+    /opt/scripts/build-wads.sh
+fi
+
 VENV="/workspace/python_envs/spawn-zone-tool"
 . "$VENV/bin/activate"
 
