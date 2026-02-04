@@ -32,6 +32,16 @@
             "name": "trenchbroom-profile",
             "url": "https://github.com/nzp-team/trenchbroom-profile.git",
             "target": "repos/trenchbroom-profile"
+        },
+        {
+            "name": "vril-engine",
+            "url": "https://github.com/nzp-team/vril-engine.git",
+            "target": "repos/vril-engine"
+        },
+        {
+            "name": "documentation",
+            "url": "https://github.com/nzp-team/documentation.git",
+            "target": "repos/documentation"
         }
     ]
 }
