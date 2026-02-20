@@ -29,8 +29,14 @@ if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" >
     echo "-----------------------------------------"
 fi
 
+# If no args, enable TTY (-it) so Textual frontend works properly.
+DOCKER_TTY_FLAGS="-i"
+if [ "$#" -eq 0 ]; then
+    DOCKER_TTY_FLAGS="-it"
+fi
+
 # Run container with mounts and pass our arguments
-docker run --platform=linux/amd64 --rm --shm-size=512m -i \
+docker run --platform=linux/amd64 --rm --shm-size=512m $DOCKER_TTY_FLAGS \
     -v "$TOOLBOX_ROOT/config":/workspace/config \
     -v "$TOOLBOX_ROOT/repos":/workspace/repos \
     -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \

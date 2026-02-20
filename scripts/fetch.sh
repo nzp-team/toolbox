@@ -1,5 +1,6 @@
 #!/bin/bash
 # @name fetch
+# @button Fetch
 # @desc Downloads latest release and clones and/or pulls repositories needed for Toolbox. Reads from config/repos.json
 # @usage nzp fetch
 set -e

@@ -1,5 +1,6 @@
 #!/bin/bash
 # @name build-map
+# @button Build Map
 # @desc Builds a map stored in repos/assets into a bsp and builds zone file (if data exists). Default behavior will build all maps.
 # @usage nzp build-map [--map map_name] [--full]
 set -e

@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y \
     cmake libgl1-mesa-dev libsdl2-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
     clang ffmpeg pandoc
 
+RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
+
 COPY scripts/ /opt/scripts/
 COPY entrypoint.sh /entrypoint.sh
 

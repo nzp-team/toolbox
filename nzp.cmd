@@ -40,8 +40,12 @@ if %FIRSTTIME%==1 (
     echo -----------------------------------------
 )
 
+rem If no args, enable TTY (-it) so Textual frontend works properly.
+set DOCKER_TTY_FLAGS=-i
+if "%~1"=="" set DOCKER_TTY_FLAGS=-it
+
 rem Run container with mounts and pass our arguments
-docker run --platform=linux/amd64 --rm --shm-size=512m -i ^
+docker run --platform=linux/amd64 --rm --shm-size=512m %DOCKER_TTY_FLAGS% ^
     -v "%TOOLBOX_ROOT%/config:/workspace/config" ^
     -v "%TOOLBOX_ROOT%/repos:/workspace/repos" ^
     -v "%TOOLBOX_ROOT%/python_envs:/workspace/python_envs" ^

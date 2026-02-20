@@ -1,5 +1,6 @@
 #!/bin/bash
 # @name build-tb-profile
+# @button Build TrenchBroom Profile
 # @desc Builds ready-to-go TrenchBroom Profile and Configuration
 # @usage nzp build-tb-profile
 set -e
@@ -24,7 +25,7 @@ else
     fi
 fi
 
-COMPILATION_PROFILE_JSON=$(cat <<EOF
+COMPILATION_PROFILE_CFG=$(cat <<EOF
 {
 	"profiles": [
 		{
@@ -91,7 +92,7 @@ cp "${TB_WORKSPACE}/Icon.png" "${TB_WORKSPACE}/build/games/nzp"
 cp "${TB_WORKSPACE}/tb-nzp.fgd" "${TB_WORKSPACE}/build/games/nzp"
 
 # Generate CompilationProfiles.json
-printf "%s\n" "$COMPILATION_PROFILE_JSON" >>  "${TB_WORKSPACE}/build/games/Nazi Zombies Portable/CompilationProfiles.json"
+printf "%s\n" "$COMPILATION_PROFILE_CFG" >>  "${TB_WORKSPACE}/build/games/Nazi Zombies Portable/CompilationProfiles.cfg"
 
 # Generate Preferences.json
 printf "%s\n" "$PREFERENCES_JSON" >>  "${TB_WORKSPACE}/build/Preferences.json"

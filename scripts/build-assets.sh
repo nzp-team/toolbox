@@ -1,5 +1,6 @@
 #!/bin/bash
 # @name build-assets
+# @button Build Assets
 # @desc Builds Game Asset sources for NZ:P.
 # @usage nzp build-assets
 set -e
