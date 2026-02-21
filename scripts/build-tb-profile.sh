@@ -5,6 +5,7 @@
 # @usage nzp build-tb-profile
 set -e
 
+TOOLBOX_ROOT="${TOOLBOX_ROOT//\\//}"
 TB_WORKSPACE=/workspace/repos/trenchbroom-profile
 ASSETS_WORKSPACE=/workspace/repos/assets
 
@@ -12,18 +13,32 @@ MAP_RUN_PARAMETERS="+map \${MAP_BASE_NAME} +sv_cheats 1"
 
 if [[ "${TOOLBOX_HOST_OS}" == "Windows" ]]; then
     TOOLBOX_BIN_NAME="nzp.cmd"
-    GAME_BINARY="nzportable-sdl64.exe"
+    GAME_BINARY="${TOOLBOX_ROOT}/game/nzportable-sdl64.exe"
 else
     TOOLBOX_BIN_NAME="nzp"
-    GAME_BINARY=$(ls /workspace/game | grep "nzportable")
+    GAME_BINARY="${TOOLBOX_ROOT}/game/$(ls /workspace/game | grep 'nzportable')"
 
     # If we downloaded the Windows version for whatever reason, and we aren't
     # on Windows, assume Wine for the binary and append the exe to the run params.
-    if [[ "${GAME_BINARY}" == "nzportable-sdl64.exe" ]]; then
+    if [[ "${GAME_BINARY}" == "${TOOLBOX_ROOT}/game/nzportable-sdl64.exe" ]]; then
         GAME_BINARY="${TOOLBOX_WINE_PATH}"
-        MAP_RUN_PARAMETERS="nzportable-sdl64.exe ${MAP_RUN_PARAMETERS}"
+        MAP_RUN_PARAMETERS="${TOOLBOX_ROOT}/game/nzportable-sdl64.exe ${MAP_RUN_PARAMETERS}"
     fi
 fi
+
+GAMEENGINE_PROFILE_CFG=$(cat <<EOF
+{
+	"profiles": [
+		{
+			"name": "Nazi Zombies Portable",
+			"parameters": "${MAP_RUN_PARAMETERS}",
+			"path": "${GAME_BINARY}"
+		}
+	],
+	"version": 1
+}
+EOF
+)
 
 COMPILATION_PROFILE_CFG=$(cat <<EOF
 {
@@ -49,17 +64,6 @@ COMPILATION_PROFILE_CFG=$(cat <<EOF
 				}
 			],
 			"workdir": "${TOOLBOX_ROOT}"
-		},
-		{
-			"name": "Run",
-			"tasks": [
-				{
-					"parameters": "${MAP_RUN_PARAMETERS}",
-					"tool": "${GAME_BINARY}",
-					"type": "tool"
-				}
-			],
-			"workdir": "${TOOLBOX_ROOT}/game"
 		}
 	],
 	"version": 1
@@ -91,8 +95,11 @@ cp "${TB_WORKSPACE}/GameConfig.cfg" "${TB_WORKSPACE}/build/games/nzp"
 cp "${TB_WORKSPACE}/Icon.png" "${TB_WORKSPACE}/build/games/nzp"
 cp "${TB_WORKSPACE}/tb-nzp.fgd" "${TB_WORKSPACE}/build/games/nzp"
 
-# Generate CompilationProfiles.json
+# Generate CompilationProfiles.cfg
 printf "%s\n" "$COMPILATION_PROFILE_CFG" >>  "${TB_WORKSPACE}/build/games/Nazi Zombies Portable/CompilationProfiles.cfg"
+
+# Generate GameEngineProfiles.cfg
+printf "%s\n" "$GAMEENGINE_PROFILE_CFG" >>  "${TB_WORKSPACE}/build/games/Nazi Zombies Portable/GameEngineProfiles.cfg"
 
 # Generate Preferences.json
 printf "%s\n" "$PREFERENCES_JSON" >>  "${TB_WORKSPACE}/build/Preferences.json"
