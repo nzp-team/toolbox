@@ -2,16 +2,34 @@
 set -e
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd)"
+TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
 
 IMAGE_NAME="nzp-toolbox:latest"
 
-# Auto-build Docker image if absent.
-if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-    echo "[INFO] Docker image not found. Building..."
-    docker build --platform=linux/amd64 -t "$IMAGE_NAME" "$TOOLBOX_ROOT"
-    echo "-----------------------------------------"
+if [ "${1:-}" = "update" ]; then
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ./nzp update" >&2
+        exit 2
+    fi
+    GIT_ROOT="$(git -C "$TOOLBOX_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -z "$GIT_ROOT" ] || [ "$(cd "$GIT_ROOT" && pwd -P)" != "$TOOLBOX_ROOT" ]; then
+        echo "[ERROR] Toolbox must be installed with git to update it. See README.md." >&2
+        exit 1
+    fi
+    if [ -n "$(git -C "$TOOLBOX_ROOT" status --porcelain --untracked-files=no)" ]; then
+        echo "[ERROR] Toolbox has local changes. Commit or stash them before updating." >&2
+        exit 1
+    fi
+    if ! git -C "$TOOLBOX_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+        echo "[ERROR] Current branch has no upstream. Check out a tracking branch before updating." >&2
+        exit 1
+    fi
+    git -C "$TOOLBOX_ROOT" pull --ff-only
+    echo "[INFO] Toolbox updated. The image will be rebuilt on the next command."
+    exit 0
 fi
+
+docker build --platform=linux/amd64 -t "$IMAGE_NAME" "$TOOLBOX_ROOT"
 
 # Detect first-time setup and pull repos if needed
 if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then

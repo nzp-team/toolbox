@@ -12,6 +12,8 @@ Toolbox can do the following in its current state:
 
 * `fetch`: Downloads latest release and clones various repositories under the [nzp-team GitHub organization](https://github.com/nzp-team), setting up Python virtual environments where necessary. Running `fetch` after a clone will pull latest changes from main. This will run on first start-up if not manually invoked.
 
+* `update`: Updates Toolbox from upstream.
+
 * `new-map`: Create a new `.map` file from the template in [assets](https://github.com/nzp-team/assets), already in a buildable state with some basic rooms built for testing.
 
 * `build-wads`: Builds WAD texture archives in [assets](https://github.com/nzp-team/assets) stored as PNG files in `source/textures/wad/` for easy modification or creation of texture WADs.
@@ -22,9 +24,13 @@ Toolbox can do the following in its current state:
 
 ## Usage/Installation
 
-1: Install [Docker](https://www.docker.com/)
+1: Install [Docker](https://www.docker.com/) and Git.
 
-2: [Download](https://github.com/nzp-team/toolbox/archive/refs/heads/main.zip) this repository (releases are TBD and depend on growth and strategy changes)
+2: Clone this repository with Git:
+```bash
+git clone https://github.com/nzp-team/toolbox.git
+cd toolbox
+```
 
 3a: On systems with Bash or other UNIX shells:
 ```bash

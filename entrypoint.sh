@@ -13,6 +13,9 @@ shift || true   # shift so "$@" holds arguments for the subcommand
 show_help() {
     echo "== Mapper Toolbox =="
     echo ""
+    echo "  update"
+    echo "      Update the Toolbox Git checkout (run from ./nzp or nzp.cmd on the host)."
+    echo ""
 
     for script in "$SCRIPTS_DIR"/*.sh; do
         # Extract metadata
