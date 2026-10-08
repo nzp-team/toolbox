@@ -20,9 +20,13 @@ Toolbox can do the following in its current state:
 
 * `build-map`: Builds all or a specific `.map` into a BSP going through the entire map compilation process, including Spawn Zone generation. Special arguments are supported via `.arg` files in the same path as the `.map`. This can easily be hooked up to TrenchBroom to never have to self-manage map compilation.
 
-* `build-quakec`: Compiles latest [QuakeC](https://github.com/nzp-team/quakec) changes from `main` branch. Useful for mods or debugging.
+* `build-quakec`: Compiles [QuakeC](https://github.com/nzp-team/quakec) changes. Useful for mods or debugging.
+
+* `build-vril`: Builds [Vril Engine](https://github.com/nzp-team/vril-engine) executables. Use `--clean` to discard its previous build first, or `-- (WERROR=1)` to pass arguments to `make`.
 
 * `test-assets`: Runs one of [assets](https://github.com/nzp-team/assets)' validation tests.
+
+* `test-quakec`: Runs the [QuakeC](https://github.com/nzp-team/quakec) unit tests with the current game data. If the game has no Linux x86_64 executable, it builds one as `game/qc-test-nzportable64`.
 
 ## Usage/Installation
 
