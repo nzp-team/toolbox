@@ -10,6 +10,8 @@ GAME_DOWNLOAD_PREFIX="https://github.com/nzp-team/nzportable/releases/download/n
 CONFIG="/workspace/config/repos.json"
 ROOT="/workspace"
 
+mkdir -p "$ROOT/repos" "$ROOT/python_envs"
+
 echo "[INFO] Syncing repositories..."
 
 jq -c '.repos[]' "$CONFIG" | while read -r repo; do

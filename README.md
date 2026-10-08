@@ -22,6 +22,8 @@ Toolbox can do the following in its current state:
 
 * `build-quakec`: Compiles latest [QuakeC](https://github.com/nzp-team/quakec) changes from `main` branch. Useful for mods or debugging.
 
+* `test-assets`: Runs one of [assets](https://github.com/nzp-team/assets)' validation tests.
+
 ## Usage/Installation
 
 1: Install [Docker](https://www.docker.com/) and Git.
