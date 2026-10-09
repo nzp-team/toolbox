@@ -6,4 +6,4 @@
 set -e
 
 cd /workspace/repos/vril-engine/testing
-./run_tests.sh $@ --content "$(pwd)/validate" --working-dir working/
+./run_tests.sh "$@" --content "$(pwd)/validate" --working-dir working/
