@@ -85,9 +85,14 @@ ENV DEVKITARM=/opt/devkitpro/devkitARM
 ENV PATH="/opt/devkitpro/tools/bin:${PATH}"
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
-      apt-get install -y gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf; \
+      dpkg --add-architecture i386; \
+      sed -i '/^Types: deb$/a Architectures: amd64 i386' /etc/apt/sources.list.d/ubuntu.sources; \
+      apt-get update; \
+      apt-get install -y gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf \
+        gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 mingw-w64-tools wine wine64 wine32:i386; \
     elif [ "$TARGETARCH" = arm64 ]; then \
-      apt-get install -y gcc-arm-linux-gnueabihf; \
+      apt-get install -y gcc-arm-linux-gnueabihf \
+        gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 mingw-w64-tools; \
     else exit 1; fi
 
 COPY --from=cross-deps /opt/foreign/ /opt/foreign/
@@ -109,6 +114,28 @@ RUN test "$(dpkg-query -W -f='${Architecture}' python3.12-minimal)" = "$TARGETAR
       printf 'int main(void) { return 0; }\n' | "$compiler" -x c - -o "/tmp/check-$triplet" \
         -L"/usr/lib/$triplet" -lSDL2 -lSDL2_mixer -lGL -lGLU; \
     done
+
+RUN mkdir -p /opt/mingw-deps && \
+    curl -fL --retry 3 -o /tmp/SDL2-mingw.tar.gz \
+      https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-devel-2.32.10-mingw.tar.gz && \
+    curl -fL --retry 3 -o /tmp/SDL2_mixer-mingw.tar.gz \
+      https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.2/SDL2_mixer-devel-2.8.2-mingw.tar.gz && \
+    tar -xzf /tmp/SDL2-mingw.tar.gz -C /tmp && \
+    tar -xzf /tmp/SDL2_mixer-mingw.tar.gz -C /tmp && \
+    for triplet in i686-w64-mingw32 x86_64-w64-mingw32; do \
+      dest="/opt/mingw-deps/$triplet"; \
+      mkdir -p "$dest"; \
+      cp -a "/tmp/SDL2-2.32.10/$triplet/." "$dest/"; \
+      cp -a "/tmp/SDL2_mixer-2.8.2/$triplet/." "$dest/"; \
+      sed -i "s|^prefix=.*|prefix=$dest|" "$dest"/lib/pkgconfig/*.pc; \
+      PKG_CONFIG_LIBDIR="$dest/lib/pkgconfig" pkg-config --exists sdl2; \
+      test -f "$dest/lib/libSDL2.a"; \
+      test -f "$dest/lib/libSDL2_mixer.a"; \
+      printf 'int main(void) { return 0; }\n' | "$triplet-gcc" -x c - -o "/tmp/check-$triplet.exe" \
+        -L"$dest/lib" -lSDL2_mixer -lSDL2; \
+    done && \
+    rm -rf /tmp/SDL2-2.32.10 /tmp/SDL2_mixer-2.8.2 \
+      /tmp/SDL2-mingw.tar.gz /tmp/SDL2_mixer-mingw.tar.gz
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
       archive=pspdev-ubuntu-latest-x86_64.tar.gz; \

@@ -14,6 +14,8 @@ show_help() {
     echo "  linux-armhf"
     echo "  psp"
     echo "  3ds"
+    echo "  windows-x86"
+    echo "  windows-x86_64"
 }
 
 TARGET=""
@@ -78,6 +80,16 @@ case "$TARGET" in
         ;;
     3ds)
         MAKEFILE="Makefile.ctr"
+        ;;
+    windows-x86)
+        MAKEFILE="Makefile.sdl"
+        TARGET_ARGS=(BUILD=build/sdl/windows-x86 TARGET=build/sdl/windows-x86/nzportable.exe CROSS_COMPILE=i686-w64-mingw32-)
+        export PKG_CONFIG_LIBDIR=/opt/mingw-deps/i686-w64-mingw32/lib/pkgconfig
+        ;;
+    windows-x86_64)
+        MAKEFILE="Makefile.sdl"
+        TARGET_ARGS=(BUILD=build/sdl/windows-x86_64 TARGET=build/sdl/windows-x86_64/nzportable.exe CROSS_COMPILE=x86_64-w64-mingw32-)
+        export PKG_CONFIG_LIBDIR=/opt/mingw-deps/x86_64-w64-mingw32/lib/pkgconfig
         ;;
     *)
         show_help >&2
