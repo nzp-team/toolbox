@@ -22,7 +22,9 @@ Toolbox can do the following in its current state:
 
 * `build-quakec`: Compiles [QuakeC](https://github.com/nzp-team/quakec) changes. Useful for mods or debugging.
 
-* `build-vril`: Builds [Vril Engine](https://github.com/nzp-team/vril-engine) executables. Use `--clean` to discard its previous build first, or `-- (WERROR=1)` to pass arguments to `make`.
+* `build-vril`: Builds [Vril Engine](https://github.com/nzp-team/vril-engine) for a selected target, including `psp` and the Linux targets. Use `--clean` to discard its previous build first, or `-- WERROR=1` to pass arguments to `make`.
+
+* `test-vril`: Runs Vril's tests.
 
 * `test-assets`: Runs one of [assets](https://github.com/nzp-team/assets)' validation tests.
 

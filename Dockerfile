@@ -9,6 +9,19 @@ RUN apt-get update && apt-get install -y \
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
+FROM native AS ppsspp
+
+COPY config/ppsspp.patch /tmp/ppsspp.patch
+
+RUN git clone --depth 1 --branch v1.17.1 --recurse-submodules \
+      https://github.com/hrydgard/ppsspp.git /opt/ppsspp && \
+    cd /opt/ppsspp && \
+    test "$(git rev-parse HEAD)" = d479b74ed9c3e321bc3735da29bc125a2ac3b9b2 && \
+    git apply /tmp/ppsspp.patch && \
+    ./b.sh --headless && \
+    test -x build/PPSSPPHeadless && \
+    test -d build/assets
+
 FROM native AS cross-deps
 
 ARG TARGETARCH
@@ -62,6 +75,9 @@ FROM native
 
 ARG TARGETARCH
 
+ENV PSPDEV=/opt/pspdev
+ENV PATH="/opt/pspdev/bin:${PATH}"
+
 RUN if [ "$TARGETARCH" = amd64 ]; then \
       apt-get install -y gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf; \
     elif [ "$TARGETARCH" = arm64 ]; then \
@@ -87,6 +103,27 @@ RUN test "$(dpkg-query -W -f='${Architecture}' python3.12-minimal)" = "$TARGETAR
       printf 'int main(void) { return 0; }\n' | "$compiler" -x c - -o "/tmp/check-$triplet" \
         -L"/usr/lib/$triplet" -lSDL2 -lSDL2_mixer -lGL -lGLU; \
     done
+
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      archive=pspdev-ubuntu-latest-x86_64.tar.gz; \
+      digest=a86efe624e770005290919617859e9df24bd8fcd3e364f4587f23ec7364b0acd; \
+    else \
+      archive=pspdev-ubuntu-24.04-arm-arm64.tar.gz; \
+      digest=0638f5f32fe4354c70040f8ee987b2e7111a981e93499d3986d30b15d1fb8e61; \
+    fi && \
+    curl -fL --retry 3 -o /tmp/pspdev.tar.gz \
+      "https://github.com/pspdev/pspdev/releases/download/v20261001/$archive" && \
+    echo "$digest  /tmp/pspdev.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/pspdev.tar.gz -C /opt && \
+    rm /tmp/pspdev.tar.gz && \
+    test -x /opt/pspdev/bin/psp-config && \
+    test -f /opt/pspdev/psp/sdk/lib/libpspmath.a
+
+COPY --from=ppsspp /opt/ppsspp/build/PPSSPPHeadless /opt/ppsspp/PPSSPPHeadless
+COPY --from=ppsspp /opt/ppsspp/build/assets/ /opt/ppsspp/assets/
+
+RUN psp-config --pspsdk-path && \
+    /opt/ppsspp/PPSSPPHeadless --help 2>&1 | grep -q -- '--system='
 
 COPY scripts/ /opt/scripts/
 COPY config/ /workspace/config/
