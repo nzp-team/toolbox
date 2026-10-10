@@ -5,7 +5,8 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
-    clang ffmpeg pandoc valgrind xauth xvfb pkg-config
+    clang ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
+    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
@@ -21,6 +22,8 @@ RUN git clone --depth 1 --branch v1.17.1 --recurse-submodules \
     ./b.sh --headless && \
     test -x build/PPSSPPHeadless && \
     test -d build/assets
+
+FROM devkitpro/devkitarm AS devkitarm
 
 FROM native AS cross-deps
 
@@ -77,6 +80,9 @@ ARG TARGETARCH
 
 ENV PSPDEV=/opt/pspdev
 ENV PATH="/opt/pspdev/bin:${PATH}"
+ENV DEVKITPRO=/opt/devkitpro
+ENV DEVKITARM=/opt/devkitpro/devkitARM
+ENV PATH="/opt/devkitpro/tools/bin:${PATH}"
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
       apt-get install -y gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf; \
@@ -121,9 +127,39 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 
 COPY --from=ppsspp /opt/ppsspp/build/PPSSPPHeadless /opt/ppsspp/PPSSPPHeadless
 COPY --from=ppsspp /opt/ppsspp/build/assets/ /opt/ppsspp/assets/
+COPY --from=devkitarm /opt/devkitpro/ /opt/devkitpro/
 
 RUN psp-config --pspsdk-path && \
     /opt/ppsspp/PPSSPPHeadless --help 2>&1 | grep -q -- '--system='
+
+RUN test -f "$DEVKITARM/3ds_rules" && \
+    test -x "$DEVKITARM/bin/arm-none-eabi-gcc"
+
+RUN git clone --depth 1 --branch revamp https://github.com/masterfeizz/picaGL.git /tmp/picaGL && \
+    mkdir -p /tmp/picaGL/clean && \
+    make -C /tmp/picaGL install && \
+    rm -rf /tmp/picaGL
+
+RUN curl -fL --retry 3 -o /tmp/mpg123.tar.bz2 \
+      https://downloads.sourceforge.net/project/mpg123/mpg123/1.32.3/mpg123-1.32.3.tar.bz2 && \
+    tar -xf /tmp/mpg123.tar.bz2 -C /tmp && \
+    cd /tmp/mpg123-1.32.3 && \
+    ./configure --host=arm-none-eabi --prefix="$DEVKITPRO/portlibs/3ds" \
+      --disable-shared --enable-static --with-cpu=generic_fpu \
+      CC="$DEVKITARM/bin/arm-none-eabi-gcc" \
+      CFLAGS='-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS' && \
+    (make -k -j"$(nproc)" || true) && \
+    (make -k install || true) && \
+    cp src/libmpg123/mpg123.h "$DEVKITPRO/portlibs/3ds/include/" && \
+    test -f "$DEVKITPRO/portlibs/3ds/lib/libmpg123.a" && \
+    rm -rf /tmp/mpg123-1.32.3 /tmp/mpg123.tar.bz2
+
+RUN curl -fL --retry 3 -o /tmp/azahar.AppImage \
+      https://github.com/azahar-emu/azahar/releases/download/2126.0/azahar.AppImage && \
+    image_offset="$(python3 -c 'import struct; p="/tmp/azahar.AppImage"; h=open(p,"rb").read(64); assert h[:6] == b"\x7fELF\x02\x01"; print(struct.unpack_from("<Q",h,40)[0] + struct.unpack_from("<H",h,58)[0] * struct.unpack_from("<H",h,60)[0])')" && \
+    unsquashfs -no-progress -offset "$image_offset" -d /opt/azahar /tmp/azahar.AppImage && \
+    test -x /opt/azahar/AppRun && \
+    rm /tmp/azahar.AppImage
 
 COPY scripts/ /opt/scripts/
 COPY config/ /workspace/config/

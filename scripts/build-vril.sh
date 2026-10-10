@@ -13,6 +13,7 @@ show_help() {
     echo "  linux-arm64"
     echo "  linux-armhf"
     echo "  psp"
+    echo "  3ds"
 }
 
 TARGET=""
@@ -74,6 +75,9 @@ case "$TARGET" in
         ;;
     psp)
         MAKEFILE="Makefile.psp"
+        ;;
+    3ds)
+        MAKEFILE="Makefile.ctr"
         ;;
     *)
         show_help >&2
