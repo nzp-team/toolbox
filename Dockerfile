@@ -45,6 +45,8 @@ RUN mkdir -p /opt/foreign/usr/lib /opt/foreign/usr/include /opt/foreign/lib && \
     if [ "$TARGETARCH" = amd64 ]; then \
       triplets='i386-linux-gnu aarch64-linux-gnu arm-linux-gnueabihf'; \
       cp -a /lib/ld-linux.so.2 /opt/foreign/lib/; \
+      cp -a /lib/ld-linux-aarch64.so.1 /opt/foreign/lib/; \
+      cp -a /lib/ld-linux-armhf.so.3 /opt/foreign/lib/; \
     else \
       triplets='arm-linux-gnueabihf'; \
       cp -a /lib/ld-linux-armhf.so.3 /opt/foreign/lib/; \
