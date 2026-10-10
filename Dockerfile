@@ -66,7 +66,11 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
       apt-get install -y gcc-arm-linux-gnueabihf; \
     else exit 1; fi
 
-COPY --from=cross-deps /opt/foreign/ /
+COPY --from=cross-deps /opt/foreign/ /opt/foreign/
+
+RUN cp -a /opt/foreign/usr/lib/. /usr/lib/ && \
+    cp -a /opt/foreign/usr/include/. /usr/include/ && \
+    cp -a /opt/foreign/lib/. /lib/
 
 RUN test "$(dpkg-query -W -f='${Architecture}' python3.12-minimal)" = "$TARGETARCH" && \
     python3 -c 'import sys; print(sys.version)' && \
