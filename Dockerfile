@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
     clang clang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
-    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0 libboost-program-options1.83.0
+    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
@@ -133,6 +133,8 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
     else exit 1; fi
 
 COPY --from=cross-deps /opt/foreign/ /opt/foreign/
+
+RUN apt-get update && apt-get install -y libboost-program-options1.83.0
 
 RUN cp -a /opt/foreign/usr/lib/. /usr/lib/ && \
     cp -a /opt/foreign/usr/include/. /usr/include/ && \
