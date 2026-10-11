@@ -4,8 +4,6 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
 
-IMAGE_NAME="nzp-toolbox:latest"
-
 if [ "${1:-}" = "update" ]; then
     if [ "$#" -ne 1 ]; then
         echo "Usage: ./nzp update" >&2
@@ -25,11 +23,51 @@ if [ "${1:-}" = "update" ]; then
         exit 1
     fi
     git -C "$TOOLBOX_ROOT" pull --ff-only
-    echo "[INFO] Toolbox updated. The image will be rebuilt on the next command."
+    echo "[INFO] Toolbox updated. The matching image will be downloaded on the next command."
     exit 0
 fi
 
-docker build --platform=linux/amd64 -t "$IMAGE_NAME" "$TOOLBOX_ROOT"
+if [ "${1:-}" = "build-image" ]; then
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ./nzp build-image" >&2
+        exit 2
+    fi
+    docker build --platform=linux/amd64 -t nzp-toolbox:local "$TOOLBOX_ROOT"
+    echo "[INFO] Local image built. Run with TOOLBOX_IMAGE=nzp-toolbox:local to use it."
+    exit 0
+fi
+
+if [ -n "${TOOLBOX_IMAGE:-}" ]; then
+    IMAGE_NAME="$TOOLBOX_IMAGE"
+else
+    COMMIT="$(git -C "$TOOLBOX_ROOT" rev-parse HEAD)"
+    REMOTE="$(git -C "$TOOLBOX_ROOT" remote get-url origin)"
+    case "$REMOTE" in
+        https://github.com/*) REPOSITORY="${REMOTE#https://github.com/}" ;;
+        git@github.com:*) REPOSITORY="${REMOTE#git@github.com:}" ;;
+        ssh://git@github.com/*) REPOSITORY="${REMOTE#ssh://git@github.com/}" ;;
+        *) echo "[ERROR] Cannot resolve a GitHub image from origin: $REMOTE" >&2
+           echo "Set TOOLBOX_IMAGE to an image reference." >&2
+           exit 1 ;;
+    esac
+    REPOSITORY="${REPOSITORY%.git}"
+    REPOSITORY="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+    if [[ ! "$REPOSITORY" =~ ^[a-z0-9_.-]+/toolbox$ ]]; then
+        echo "[ERROR] Expected a GitHub Toolbox origin, got: $REMOTE" >&2
+        echo "Set TOOLBOX_IMAGE to an image reference." >&2
+        exit 1
+    fi
+    IMAGE_NAME="ghcr.io/$REPOSITORY:sha-$COMMIT"
+fi
+
+if [ "$(docker image inspect --format '{{.Architecture}}' "$IMAGE_NAME" 2>/dev/null || true)" != amd64 ]; then
+    echo "[INFO] Downloading $IMAGE_NAME..."
+    if ! docker pull --platform=linux/amd64 "$IMAGE_NAME"; then
+        echo "[ERROR] Could not download $IMAGE_NAME." >&2
+        echo "If this commit is not published yet, wait for image CI or run ./nzp build-image and set TOOLBOX_IMAGE=nzp-toolbox:local." >&2
+        exit 1
+    fi
+fi
 
 # Detect first-time setup and pull repos if needed
 if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then

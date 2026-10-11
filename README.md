@@ -12,7 +12,9 @@ Toolbox can do the following in its current state:
 
 * `fetch`: Downloads latest release and clones various repositories under the [nzp-team GitHub organization](https://github.com/nzp-team), setting up Python virtual environments where necessary. Running `fetch` after a clone will pull latest changes from main. This will run on first start-up if not manually invoked.
 
-* `update`: Updates Toolbox from upstream.
+* `update`: Updates Toolbox from upstream. The next command will download the published image for the new commit.
+
+* `build-image`: Builds a local amd64 image for Toolbox development. Set `TOOLBOX_IMAGE=nzp-toolbox:local` to use it.
 
 * `new-map`: Create a new `.map` file from the template in [assets](https://github.com/nzp-team/assets), already in a buildable state with some basic rooms built for testing.
 
