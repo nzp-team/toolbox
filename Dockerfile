@@ -76,7 +76,8 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
         'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
         > /etc/apt/sources.list.d/ubuntu-ports.sources; \
       apt-get update; \
-      apt-get install -y \
+      apt-get install -y --no-remove \
+        python3:amd64 python3-minimal:amd64 python3.12-minimal:amd64 \
         libsdl2-dev:i386 libsdl2-mixer-dev:i386 libgl-dev:i386 libglu1-mesa-dev:i386 \
         libsdl2-dev:arm64 libsdl2-mixer-dev:arm64 libgl-dev:arm64 libglu1-mesa-dev:arm64 \
         libsdl2-dev:armhf libsdl2-mixer-dev:armhf libgl-dev:armhf libglu1-mesa-dev:armhf \
@@ -85,7 +86,8 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
       dpkg --add-architecture armhf; \
       sed -i '/^Types: deb$/a Architectures: arm64 armhf' /etc/apt/sources.list.d/ubuntu.sources; \
       apt-get update; \
-      apt-get install -y \
+      apt-get install -y --no-remove \
+        python3:arm64 python3-minimal:arm64 python3.12-minimal:arm64 \
         libsdl2-dev:armhf libsdl2-mixer-dev:armhf libgl-dev:armhf libglu1-mesa-dev:armhf \
         libgl1:armhf libgl1-mesa-dri:armhf libsdl2-2.0-0:armhf libsdl2-mixer-2.0-0:armhf; \
     else exit 1; fi
