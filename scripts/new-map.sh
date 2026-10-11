@@ -1,5 +1,6 @@
 #!/bin/bash
 # @name new-map
+# @button New Map
 # @desc Creates file structure for new map of name, copying template for use.
 # @usage nzp new-map --map map_name
 set -e

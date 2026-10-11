@@ -10,7 +10,11 @@ Toolbox leverages Docker to set up a virtual environment separate from your host
 
 Toolbox can do the following in its current state:
 
-* `fetch`: Clones various repositories under the [nzp-team GitHub organization](https://github.com/nzp-team), setting up Python virtual environments where necessary. Running `fetch` after a clone will pull latest changes from main. This will run on first start-up if not manually invoked.
+* `fetch`: Downloads latest release and clones various repositories under the [nzp-team GitHub organization](https://github.com/nzp-team), setting up Python virtual environments where necessary. Running `fetch` after a clone will pull latest changes from main. This will run on first start-up if not manually invoked.
+
+* `update`: Updates Toolbox from upstream. The next command will download the published image for the new commit.
+
+* `build-image`: Builds a local amd64 image for Toolbox development. Set `TOOLBOX_IMAGE=nzp-toolbox:local` to use it.
 
 * `new-map`: Create a new `.map` file from the template in [assets](https://github.com/nzp-team/assets), already in a buildable state with some basic rooms built for testing.
 
@@ -18,13 +22,27 @@ Toolbox can do the following in its current state:
 
 * `build-map`: Builds all or a specific `.map` into a BSP going through the entire map compilation process, including Spawn Zone generation. Special arguments are supported via `.arg` files in the same path as the `.map`. This can easily be hooked up to TrenchBroom to never have to self-manage map compilation.
 
-* `build-quakec`: Compiles latest [QuakeC](https://github.com/nzp-team/quakec) changes from `main` branch. Useful for mods or debugging.
+* `build-quakec`: Compiles [QuakeC](https://github.com/nzp-team/quakec) changes. Useful for mods or debugging.
+
+* `build-vril`: Builds [Vril Engine](https://github.com/nzp-team/vril-engine) for a selected target. Use `--clean` to discard its previous build first, or `-- WERROR=1` to pass arguments to `make`.
+
+* `analyze-vril`: Runs static analysis on [Vril Engine](https://github.com/nzp-team/vril-engine) with `--mode cppcheck` or `--mode clang-analysis`.
+
+* `test-vril`: Runs Vril's tests.
+
+* `test-assets`: Runs one of [assets](https://github.com/nzp-team/assets)' validation tests.
+
+* `test-quakec`: Runs the [QuakeC](https://github.com/nzp-team/quakec) unit tests with the current game data. If the game has no Linux x86_64 executable, it builds one as `game/qc-test-nzportable64`.
 
 ## Usage/Installation
 
-1: Install [Docker](https://www.docker.com/)
+1: Install [Docker](https://www.docker.com/) and Git.
 
-2: [Download](https://github.com/nzp-team/toolbox/archive/refs/heads/main.zip) this repository (releases are TBD and depend on growth and strategy changes)
+2: Clone this repository with Git:
+```bash
+git clone https://github.com/nzp-team/toolbox.git
+cd toolbox
+```
 
 3a: On systems with Bash or other UNIX shells:
 ```bash

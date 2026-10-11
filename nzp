@@ -2,32 +2,104 @@
 set -e
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd)"
+TOOLBOX_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
 
-IMAGE_NAME="nzp-toolbox:latest"
+if [ "${1:-}" = "update" ]; then
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ./nzp update" >&2
+        exit 2
+    fi
+    GIT_ROOT="$(git -C "$TOOLBOX_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -z "$GIT_ROOT" ] || [ "$(cd "$GIT_ROOT" && pwd -P)" != "$TOOLBOX_ROOT" ]; then
+        echo "[ERROR] Toolbox must be installed with git to update it. See README.md." >&2
+        exit 1
+    fi
+    if [ -n "$(git -C "$TOOLBOX_ROOT" status --porcelain --untracked-files=no)" ]; then
+        echo "[ERROR] Toolbox has local changes. Commit or stash them before updating." >&2
+        exit 1
+    fi
+    if ! git -C "$TOOLBOX_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+        echo "[ERROR] Current branch has no upstream. Check out a tracking branch before updating." >&2
+        exit 1
+    fi
+    git -C "$TOOLBOX_ROOT" pull --ff-only
+    echo "[INFO] Toolbox updated. The matching image will be downloaded on the next command."
+    exit 0
+fi
 
-# Auto-build Docker image if absent.
-if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-    echo "[INFO] Docker image not found. Building..."
-    docker build --platform=linux/amd64 -t "$IMAGE_NAME" "$TOOLBOX_ROOT"
-    echo "-----------------------------------------"
+if [ "${1:-}" = "build-image" ]; then
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: ./nzp build-image" >&2
+        exit 2
+    fi
+    docker build --platform=linux/amd64 -t nzp-toolbox:local "$TOOLBOX_ROOT"
+    echo "[INFO] Local image built. Run with TOOLBOX_IMAGE=nzp-toolbox:local to use it."
+    exit 0
+fi
+
+if [ -n "${TOOLBOX_IMAGE:-}" ]; then
+    IMAGE_NAME="$TOOLBOX_IMAGE"
+else
+    COMMIT="$(git -C "$TOOLBOX_ROOT" rev-parse HEAD)"
+    REMOTE="$(git -C "$TOOLBOX_ROOT" remote get-url origin)"
+    case "$REMOTE" in
+        https://github.com/*) REPOSITORY="${REMOTE#https://github.com/}" ;;
+        git@github.com:*) REPOSITORY="${REMOTE#git@github.com:}" ;;
+        ssh://git@github.com/*) REPOSITORY="${REMOTE#ssh://git@github.com/}" ;;
+        *) echo "[ERROR] Cannot resolve a GitHub image from origin: $REMOTE" >&2
+           echo "Set TOOLBOX_IMAGE to an image reference." >&2
+           exit 1 ;;
+    esac
+    REPOSITORY="${REPOSITORY%.git}"
+    REPOSITORY="$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+    if [[ ! "$REPOSITORY" =~ ^[a-z0-9_.-]+/toolbox$ ]]; then
+        echo "[ERROR] Expected a GitHub Toolbox origin, got: $REMOTE" >&2
+        echo "Set TOOLBOX_IMAGE to an image reference." >&2
+        exit 1
+    fi
+    IMAGE_NAME="ghcr.io/$REPOSITORY:sha-$COMMIT"
+fi
+
+if [ "$(docker image inspect --format '{{.Architecture}}' "$IMAGE_NAME" 2>/dev/null || true)" != amd64 ]; then
+    echo "[INFO] Downloading $IMAGE_NAME..."
+    if ! docker pull --platform=linux/amd64 "$IMAGE_NAME"; then
+        echo "[ERROR] Could not download $IMAGE_NAME." >&2
+        echo "If this commit is not published yet, wait for image CI or run ./nzp build-image and set TOOLBOX_IMAGE=nzp-toolbox:local." >&2
+        exit 1
+    fi
 fi
 
 # Detect first-time setup and pull repos if needed
 if [ ! -d "$TOOLBOX_ROOT/repos" ] || ! compgen -G "$TOOLBOX_ROOT/repos/*/.git" > /dev/null; then
     echo "[INFO] Pulling repositories for first time use..."
-    docker run --platform=linux/amd64 --rm -i \
+    docker run --platform=linux/amd64 --rm --shm-size=512m -i \
         -v "$TOOLBOX_ROOT/config":/workspace/config \
         -v "$TOOLBOX_ROOT/repos":/workspace/repos \
         -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
+        -v "$TOOLBOX_ROOT/game":/workspace/game \
+        -e TOOLBOX_HOST_OS=$(uname -s) \
+        -e TOOLBOX_HOST_ARCH=$(arch) \
+        -e TOOLBOX_ROOT=$TOOLBOX_ROOT \
+        -e TOOLBOX_WINE_PATH=$(which wine) \
         "$IMAGE_NAME" fetch
     echo "-----------------------------------------"
 fi
 
+# If no args, enable TTY (-it) so Textual frontend works properly.
+DOCKER_TTY_FLAGS="-i"
+if [ "$#" -eq 0 ]; then
+    DOCKER_TTY_FLAGS="-it"
+fi
+
 # Run container with mounts and pass our arguments
-docker run --platform=linux/amd64 --rm -i \
+docker run --platform=linux/amd64 --rm --shm-size=512m $DOCKER_TTY_FLAGS \
     -v "$TOOLBOX_ROOT/config":/workspace/config \
     -v "$TOOLBOX_ROOT/repos":/workspace/repos \
     -v "$TOOLBOX_ROOT/python_envs":/workspace/python_envs \
+    -v "$TOOLBOX_ROOT/game":/workspace/game \
+    -e TOOLBOX_HOST_OS=$(uname -s) \
+    -e TOOLBOX_HOST_ARCH=$(arch) \
+    -e TOOLBOX_ROOT=$TOOLBOX_ROOT \
+    -e TOOLBOX_WINE_PATH=$(which wine) \
     "$IMAGE_NAME" \
     "$@"

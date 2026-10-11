@@ -1,12 +1,16 @@
 #!/bin/bash
 # @name fetch
-# @desc Clones and/or pulls repositories needed for Toolbox. Reads from config/repos.json
+# @button Fetch
+# @desc Downloads latest release and clones and/or pulls repositories needed for Toolbox. Reads from config/repos.json
 # @usage nzp fetch
 set -e
 set -o pipefail
 
+GAME_DOWNLOAD_PREFIX="https://github.com/nzp-team/nzportable/releases/download/nightly/nzportable-"
 CONFIG="/workspace/config/repos.json"
 ROOT="/workspace"
+
+mkdir -p "$ROOT/repos" "$ROOT/python_envs"
 
 echo "[INFO] Syncing repositories..."
 
@@ -80,3 +84,29 @@ done
 
 echo ""
 echo "[INFO] All repositories synchronized."
+
+echo "[INFO] Downloading latest NZ:P release.."
+
+mkdir -p "${ROOT}/game"
+
+if [[ "${TOOLBOX_HOST_OS}" == *"Linux"* ]]; then
+    if [[ "${TOOLBOX_HOST_ARCH}" == *"x86"* ]]; then
+        GAME_TARGET="linux64"
+    else
+        GAME_TARGET="linuxarm64"
+    fi
+else
+    # NZ:P doesn't support arm on Windows.
+    GAME_TARGET="win64"
+fi
+
+GAME_DOWNLOAD_PATH="${GAME_DOWNLOAD_PREFIX}${GAME_TARGET}.zip"
+
+echo "[INFO] Resolved [${GAME_TARGET}] as GAME_TARGET."
+echo "[INFO] Resolved [${GAME_DOWNLOAD_PATH}] as GAME_DOWNLOAD_PATH."
+
+curl -L -o "${ROOT}/game.zip" "${GAME_DOWNLOAD_PATH}"
+unzip -o "${ROOT}/game.zip" -d "${ROOT}/game"
+rm -rf "${ROOT}/game.zip"
+
+echo "[INFO] Done downloading NZ:P release."

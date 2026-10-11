@@ -2,6 +2,7 @@
 set -e
 
 SCRIPTS_DIR="/opt/scripts"
+FRONTEND="/opt/scripts/frontend.py"
 
 command="$1"
 shift || true   # shift so "$@" holds arguments for the subcommand
@@ -11,6 +12,9 @@ shift || true   # shift so "$@" holds arguments for the subcommand
 # --------------------------------------------------------
 show_help() {
     echo "== Mapper Toolbox =="
+    echo ""
+    echo "  update"
+    echo "      Update the Toolbox Git checkout (run from ./nzp or nzp.cmd on the host)."
     echo ""
 
     for script in "$SCRIPTS_DIR"/*.sh; do
@@ -28,8 +32,21 @@ show_help() {
     done
 }
 
-# Default or help
-if [ -z "$command" ] || [ "$command" = "help" ]; then
+# --------------------------------------------------------
+# Start TUI if ran with no invocation
+# --------------------------------------------------------
+if [ -z "$command" ]; then
+    if [ -f "$FRONTEND" ]; then
+        exec python3 "$FRONTEND"
+    else
+        echo "[ERROR] Frontend not found at $FRONTEND"
+        echo "Falling back to help..."
+        show_help
+        exit 1
+    fi
+fi
+
+if [ "$command" = "help" ]; then
     show_help
     exit 0
 fi
