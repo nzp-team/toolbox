@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
     clang clang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
-    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
+    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0 libboost-program-options1.83.0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
@@ -30,6 +30,33 @@ FROM devkitpro/devkita64 AS devkita64
 RUN dkp-pacman -S --needed --noconfirm switch-sdl2_mixer && \
     test -f /opt/devkitpro/libnx/switch_rules && \
     test -f /opt/devkitpro/portlibs/switch/lib/pkgconfig/SDL2_mixer.pc
+
+FROM vitasdk/vitasdk:2026.08 AS vita
+
+RUN git clone https://github.com/Rinnegatamante/vitaGL.git /tmp/vitaGL && \
+    cd /tmp/vitaGL && \
+    git checkout 6e7fe40 && \
+    make MATH_SPEEDHACK=1 PRIMITIVES_SPEEDHACK=1 HAVE_FFP_SHADER_SUPPORT=1 DISABLE_FFP_MULTITEXTURE=1 HAVE_WVP_ON_GPU=1 NO_TILE_CLIPPER=1 NO_SPLASHSCREEN=1 -j"$(nproc)" && \
+    make install && \
+    rm -rf /tmp/vitaGL
+
+FROM ubuntu:24.04 AS ndless
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ git make wget texinfo python3-dev ca-certificates \
+    libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev lbzip2 xz-utils \
+    libboost-program-options-dev php file
+
+RUN git clone --recursive --depth 1 --branch r2020 \
+    https://github.com/ndless-nspire/Ndless.git /opt/ndless
+
+WORKDIR /opt/ndless/ndless-sdk/toolchain
+RUN PARALLEL="-j$(nproc)" ./build_toolchain.sh
+
+ENV PATH="/opt/ndless/ndless-sdk/toolchain/install/bin:/opt/ndless/ndless-sdk/bin:${PATH}"
+WORKDIR /opt/ndless
+RUN make all -j"$(nproc)" && \
+    rm -rf ndless-sdk/toolchain/build ndless-sdk/toolchain/download
 
 FROM native AS cross-deps
 
@@ -90,6 +117,9 @@ ENV DEVKITPRO=/opt/devkitpro
 ENV DEVKITARM=/opt/devkitpro/devkitARM
 ENV DEVKITA64=/opt/devkitpro/devkitA64
 ENV PATH="/opt/devkitpro/tools/bin:${PATH}"
+ENV VITASDK=/usr/local/vitasdk
+ENV PATH="/usr/local/vitasdk/bin:${PATH}"
+ENV PATH="/opt/ndless/ndless-sdk/toolchain/install/bin:/opt/ndless/ndless-sdk/bin:${PATH}"
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
       dpkg --add-architecture i386; \
@@ -163,6 +193,10 @@ COPY --from=ppsspp /opt/ppsspp/build/PPSSPPHeadless /opt/ppsspp/PPSSPPHeadless
 COPY --from=ppsspp /opt/ppsspp/build/assets/ /opt/ppsspp/assets/
 COPY --from=devkitarm /opt/devkitpro/ /opt/devkitpro/
 COPY --from=devkita64 /opt/devkitpro/ /opt/devkitpro/
+COPY --from=vita /usr/local/vitasdk/ /usr/local/vitasdk/
+COPY --from=ndless /opt/ndless/ /opt/ndless/
+
+RUN nspire-gcc -v && command -v genzehn
 
 RUN psp-config --pspsdk-path && \
     /opt/ppsspp/PPSSPPHeadless --help 2>&1 | grep -q -- '--system='

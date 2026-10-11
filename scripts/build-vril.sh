@@ -15,6 +15,8 @@ show_help() {
     echo "  psp"
     echo "  3ds"
     echo "  switch"
+    echo "  vita"
+    echo "  nspire"
     echo "  windows-x86"
     echo "  windows-x86_64"
 }
@@ -84,6 +86,12 @@ case "$TARGET" in
         ;;
     switch)
         MAKEFILE="Makefile.nx"
+        ;;
+    vita)
+        MAKEFILE="Makefile.psp2"
+        ;;
+    nspire)
+        MAKEFILE="Makefile.nspire"
         ;;
     windows-x86)
         MAKEFILE="Makefile.sdl"
