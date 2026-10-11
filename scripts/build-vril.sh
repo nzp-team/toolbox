@@ -14,6 +14,7 @@ show_help() {
     echo "  linux-armhf"
     echo "  psp"
     echo "  3ds"
+    echo "  switch"
     echo "  windows-x86"
     echo "  windows-x86_64"
 }
@@ -80,6 +81,9 @@ case "$TARGET" in
         ;;
     3ds)
         MAKEFILE="Makefile.ctr"
+        ;;
+    switch)
+        MAKEFILE="Makefile.nx"
         ;;
     windows-x86)
         MAKEFILE="Makefile.sdl"

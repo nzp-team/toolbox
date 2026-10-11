@@ -5,7 +5,7 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
-    clang ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
+    clang clang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
     ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
@@ -24,6 +24,12 @@ RUN git clone --depth 1 --branch v1.17.1 --recurse-submodules \
     test -d build/assets
 
 FROM devkitpro/devkitarm AS devkitarm
+
+FROM devkitpro/devkita64 AS devkita64
+
+RUN dkp-pacman -S --needed --noconfirm switch-sdl2_mixer && \
+    test -f /opt/devkitpro/libnx/switch_rules && \
+    test -f /opt/devkitpro/portlibs/switch/lib/pkgconfig/SDL2_mixer.pc
 
 FROM native AS cross-deps
 
@@ -82,6 +88,7 @@ ENV PSPDEV=/opt/pspdev
 ENV PATH="/opt/pspdev/bin:${PATH}"
 ENV DEVKITPRO=/opt/devkitpro
 ENV DEVKITARM=/opt/devkitpro/devkitARM
+ENV DEVKITA64=/opt/devkitpro/devkitA64
 ENV PATH="/opt/devkitpro/tools/bin:${PATH}"
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
@@ -155,12 +162,16 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 COPY --from=ppsspp /opt/ppsspp/build/PPSSPPHeadless /opt/ppsspp/PPSSPPHeadless
 COPY --from=ppsspp /opt/ppsspp/build/assets/ /opt/ppsspp/assets/
 COPY --from=devkitarm /opt/devkitpro/ /opt/devkitpro/
+COPY --from=devkita64 /opt/devkitpro/ /opt/devkitpro/
 
 RUN psp-config --pspsdk-path && \
     /opt/ppsspp/PPSSPPHeadless --help 2>&1 | grep -q -- '--system='
 
 RUN test -f "$DEVKITARM/3ds_rules" && \
-    test -x "$DEVKITARM/bin/arm-none-eabi-gcc"
+    test -x "$DEVKITARM/bin/arm-none-eabi-gcc" && \
+    test -f "$DEVKITPRO/libnx/switch_rules" && \
+    test -x "$DEVKITA64/bin/aarch64-none-elf-gcc" && \
+    test -f "$DEVKITPRO/portlibs/switch/lib/pkgconfig/SDL2_mixer.pc"
 
 RUN git clone --depth 1 --branch revamp https://github.com/masterfeizz/picaGL.git /tmp/picaGL && \
     mkdir -p /tmp/picaGL/clean && \
