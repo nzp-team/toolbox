@@ -24,6 +24,8 @@ Toolbox can do the following in its current state:
 
 * `build-vril`: Builds [Vril Engine](https://github.com/nzp-team/vril-engine) for a selected target. Use `--clean` to discard its previous build first, or `-- WERROR=1` to pass arguments to `make`.
 
+* `analyze-vril`: Runs static analysis on [Vril Engine](https://github.com/nzp-team/vril-engine) with `--mode cppcheck` or `--mode clang-analysis`.
+
 * `test-vril`: Runs Vril's tests.
 
 * `test-assets`: Runs one of [assets](https://github.com/nzp-team/assets)' validation tests.
