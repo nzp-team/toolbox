@@ -40,6 +40,39 @@ RUN git clone https://github.com/Rinnegatamante/vitaGL.git /tmp/vitaGL && \
     make install && \
     rm -rf /tmp/vitaGL
 
+FROM ubuntu:24.04 AS ps2
+
+ARG TARGETARCH
+
+ENV PS2DEV=/usr/local/ps2dev
+ENV PS2SDK=/usr/local/ps2dev/ps2sdk
+ENV GSKIT=/usr/local/ps2dev/gsKit
+ENV PATH="${PS2DEV}/bin:${PS2DEV}/ee/bin:${PS2DEV}/iop/bin:${PS2DEV}/dvp/bin:${PS2SDK}/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN case "$TARGETARCH" in \
+      amd64) archive=ps2dev-ubuntu-latest.tar.gz; \
+        digest=c8e5dedccf62084d476894e88cd0451b57f1ed288e741eb3c1263010aaffc028;; \
+      arm64) archive=ps2dev-ubuntu-24.04-arm.tar.gz; \
+        digest=ed69330f235d421754196acf866f8590e5f92e8b92571f1c7e05e853900e7622;; \
+      *) exit 1;; \
+    esac && \
+    curl -fL --retry 3 -o /tmp/ps2dev.tar.gz \
+      "https://github.com/ps2dev/ps2dev/releases/download/v2.0.0/$archive" && \
+    echo "$digest  /tmp/ps2dev.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/ps2dev.tar.gz -C /usr/local && \
+    rm /tmp/ps2dev.tar.gz && \
+    mips64r5900el-ps2-elf-gcc --version && \
+    dvp-as --version && \
+    test -f "$GSKIT/lib/libgskit.a" && \
+    test -f "$GSKIT/lib/libdmakit.a" && \
+    test -f "$PS2SDK/ee/lib/libpacket2.a" && \
+    test -f "$PS2SDK/ports/include/mpg123.h" && \
+    test -f "$PS2SDK/ports/lib/libmpg123.a"
+
 FROM ubuntu:24.04 AS ndless
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -113,6 +146,10 @@ FROM native
 
 ARG TARGETARCH
 
+ENV PS2DEV=/usr/local/ps2dev
+ENV PS2SDK=/usr/local/ps2dev/ps2sdk
+ENV GSKIT=/usr/local/ps2dev/gsKit
+ENV PATH="${PS2DEV}/bin:${PS2DEV}/ee/bin:${PS2DEV}/iop/bin:${PS2DEV}/dvp/bin:${PS2SDK}/bin:${PATH}"
 ENV PSPDEV=/opt/pspdev
 ENV PATH="/opt/pspdev/bin:${PATH}"
 ENV DEVKITPRO=/opt/devkitpro
@@ -199,6 +236,9 @@ COPY --from=devkitarm /opt/devkitpro/ /opt/devkitpro/
 COPY --from=devkita64 /opt/devkitpro/ /opt/devkitpro/
 COPY --from=vita /usr/local/vitasdk/ /usr/local/vitasdk/
 COPY --from=ndless /opt/ndless/ /opt/ndless/
+COPY --from=ps2 /usr/local/ps2dev/ /usr/local/ps2dev/
+
+RUN mips64r5900el-ps2-elf-gcc --version && dvp-as --version
 
 RUN nspire-gcc -v && command -v genzehn
 
