@@ -54,3 +54,4 @@ nzp.cmd fetch
 ```
 
 4: Profit. You can use `nzp help` for the complete command list (including optional and required parameters)
+
