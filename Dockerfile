@@ -10,6 +10,14 @@ RUN apt-get update && apt-get install -y \
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
+FROM native AS emscripten
+
+RUN git clone --depth=1  https://github.com/emscripten-core/emsdk.git /opt/emsdk
+
+WORKDIR /opt/emsdk
+
+RUN ./emsdk install 6.0.9 && ./emsdk activate 6.0.9
+
 FROM native AS ppsspp
 
 COPY config/ppsspp.patch /tmp/ppsspp.patch
@@ -159,6 +167,8 @@ ENV PATH="/opt/devkitpro/tools/bin:${PATH}"
 ENV VITASDK=/usr/local/vitasdk
 ENV PATH="/usr/local/vitasdk/bin:${PATH}"
 ENV PATH="/opt/ndless/ndless-sdk/toolchain/install/bin:/opt/ndless/ndless-sdk/bin:${PATH}"
+ENV EMSDK=/opt/emsdk
+ENV PATH="/opt/emsdk:/opt/emsdk/node/24.19.0_64bit/bin:/opt/emsdk/upstream/emscripten:${PATH}"
 
 RUN if [ "$TARGETARCH" = amd64 ]; then \
       dpkg --add-architecture i386; \
@@ -237,6 +247,7 @@ COPY --from=devkita64 /opt/devkitpro/ /opt/devkitpro/
 COPY --from=vita /usr/local/vitasdk/ /usr/local/vitasdk/
 COPY --from=ndless /opt/ndless/ /opt/ndless/
 COPY --from=ps2 /usr/local/ps2dev/ /usr/local/ps2dev/
+COPY --from=emscripten /opt/emsdk /opt/emsdk
 
 RUN mips64r5900el-ps2-elf-gcc --version && dvp-as --version
 

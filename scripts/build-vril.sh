@@ -20,10 +20,12 @@ show_help() {
     echo "  nspire"
     echo "  windows-x86"
     echo "  windows-x86_64"
+    echo "  emscripten"
 }
 
 TARGET=""
 CLEAN=0
+MAKE="make"
 MAKE_ARGS=()
 TARGET_ARGS=()
 
@@ -108,6 +110,11 @@ case "$TARGET" in
         TARGET_ARGS=(BUILD=build/sdl/windows-x86_64 TARGET=build/sdl/windows-x86_64/nzportable.exe CROSS_COMPILE=x86_64-w64-mingw32-)
         export PKG_CONFIG_LIBDIR=/opt/mingw-deps/x86_64-w64-mingw32/lib/pkgconfig
         ;;
+    emscripten)
+        MAKEFILE="Makefile.sdl"
+        TARGET_ARGS=(BUILD=build/sdl/emscripten TARGET=build/sdl/emscripten/nzportable.js)
+        MAKE="emmake make"
+        ;;
     *)
         show_help >&2
         exit 2
@@ -117,7 +124,7 @@ esac
 cd /workspace/repos/vril-engine
 
 if [ "$CLEAN" -eq 1 ]; then
-    make -f "$MAKEFILE" "${TARGET_ARGS[@]}" clean
+    $MAKE -f "$MAKEFILE" "${TARGET_ARGS[@]}" clean
 fi
 
-make -f "$MAKEFILE" -j"$(nproc)" "${TARGET_ARGS[@]}" "${MAKE_ARGS[@]}"
+$MAKE -f "$MAKEFILE" -j"$(nproc)" "${TARGET_ARGS[@]}" "${MAKE_ARGS[@]}"
