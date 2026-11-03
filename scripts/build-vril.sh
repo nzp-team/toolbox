@@ -13,6 +13,7 @@ show_help() {
     echo "  linux-arm64"
     echo "  linux-armhf"
     echo "  ps2"
+    echo "  ps4"
     echo "  psp"
     echo "  3ds"
     echo "  switch"
@@ -26,6 +27,7 @@ TARGET=""
 CLEAN=0
 MAKE_ARGS=()
 TARGET_ARGS=()
+BUILD_GOALS=()
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -83,6 +85,11 @@ case "$TARGET" in
         MAKEFILE="Makefile.ps2"
         TARGET_ARGS=(MAKEFLAGS=)
         ;;
+    ps4)
+        MAKEFILE="Makefile.ps4"
+        TARGET_ARGS=(CC=clang LD=ld.lld)
+        BUILD_GOALS=(pkg)
+        ;;
     psp)
         MAKEFILE="Makefile.psp"
         ;;
@@ -120,4 +127,4 @@ if [ "$CLEAN" -eq 1 ]; then
     make -f "$MAKEFILE" "${TARGET_ARGS[@]}" clean
 fi
 
-make -f "$MAKEFILE" -j"$(nproc)" "${TARGET_ARGS[@]}" "${MAKE_ARGS[@]}"
+make -f "$MAKEFILE" -j"$(nproc)" "${TARGET_ARGS[@]}" "${BUILD_GOALS[@]}" "${MAKE_ARGS[@]}"

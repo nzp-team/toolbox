@@ -5,10 +5,150 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
-    clang clang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
+    clang clang-tools lld glslang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
     ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
+
+FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS ps4-shaders
+
+ARG BUILDARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl git xz-utils && rm -rf /var/lib/apt/lists/*
+
+RUN case "$BUILDARCH" in \
+      amd64) zigarch=x86_64; digest=1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026;; \
+      arm64) zigarch=aarch64; digest=9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8;; \
+      *) exit 1;; esac && \
+    curl -fL --retry 3 -o /tmp/zig.tar.xz "https://ziglang.org/download/0.17.0/zig-$zigarch-linux-0.17.0.tar.xz" && \
+    echo "$digest  /tmp/zig.tar.xz" | sha256sum -c - && \
+    mkdir /tmp/zig && tar -xJf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1 && \
+    git clone https://github.com/lateleite/psbc.git /tmp/psbc && \
+    cd /tmp/psbc && git checkout 3b1ea85bc25315d6e611f58f51a8639003a291e8 && \
+    /tmp/zig/zig build --release=fast -Dtarget=x86_64-linux-musl -j2 && \
+    git diff --exit-code HEAD -- && \
+    mkdir -p /out && cp zig-out/bin/psbc /out/ && \
+    cp LICENSE /out/ && \
+    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/psbc /root/.cache/zig
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS ps4-pkgtool
+
+ARG TARGETARCH
+
+RUN git clone https://github.com/OpenOrbis/LibOrbisPkg.git /tmp/LibOrbisPkg && \
+    cd /tmp/LibOrbisPkg && \
+    git checkout 92a4e7f8e5914cb06b52ba3ae6b0675da438a051 && \
+    case "$TARGETARCH" in amd64) runtime=linux-x64;; arm64) runtime=linux-arm64;; *) exit 1;; esac && \
+    dotnet publish PkgTool.Core/PkgTool.Core.csproj -c Release -r "$runtime" \
+      --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true \
+      -o /out && \
+    cp LICENSE.txt /out/
+
+FROM ubuntu:24.04 AS ps4
+
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl git build-essential clang lld glslang-tools python3 \
+    xz-utils bzip2 golang-go libicu74 libssl3t64 zlib1g && \
+    if [ "$TARGETARCH" = arm64 ]; then apt-get install -y --no-install-recommends qemu-user; fi && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV OO_PS4_TOOLCHAIN=/opt/ps4/sdk
+ENV PS4_DEPS=/opt/ps4/portlibs
+ENV FREEGNM_EXAMPLES=/opt/ps4/share/freegnm-examples
+ENV PSBC=/opt/ps4/bin/psbc
+ENV PATH="/opt/ps4/bin:${PATH}"
+
+RUN curl -fL --retry 3 -o /tmp/openorbis.tar.gz \
+      https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz && \
+    echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  /tmp/openorbis.tar.gz' | sha256sum -c - && \
+    mkdir -p "$OO_PS4_TOOLCHAIN" && \
+    tar -xzf /tmp/openorbis.tar.gz -C "$OO_PS4_TOOLCHAIN" --strip-components=2 \
+      OpenOrbis/PS4Toolchain/include OpenOrbis/PS4Toolchain/lib \
+      OpenOrbis/PS4Toolchain/link.x OpenOrbis/PS4Toolchain/LICENSE \
+      OpenOrbis/PS4Toolchain/samples/graphics/sce_module \
+      OpenOrbis/PS4Toolchain/samples/graphics/sce_sys/about && \
+    rm /tmp/openorbis.tar.gz
+
+RUN mkdir -p "$OO_PS4_TOOLCHAIN/bin/linux" && \
+    git clone https://github.com/OpenOrbis/create-fself.git /tmp/create-fself && \
+    cd /tmp/create-fself && git checkout f2da6229684ce320f673c06fceac9c218f621788 && \
+    cd cmd/create-fself && go build -modfile=go-linux.mod -o "$OO_PS4_TOOLCHAIN/bin/linux/create-fself" . && \
+    git clone https://github.com/OpenOrbis/create-gp4.git /tmp/create-gp4 && \
+    cd /tmp/create-gp4 && git checkout bf8e66e9e9bdd92e41e1697893bc8098a151fa24 && \
+    GO111MODULE=off go build -o "$OO_PS4_TOOLCHAIN/bin/linux/create-gp4" ./cmd/create-gp4/main.go && \
+    rm -rf /tmp/create-fself /tmp/create-gp4 /root/go
+
+COPY --from=ps4-pkgtool /out/ /opt/ps4/sdk/bin/linux/
+
+RUN git clone https://github.com/PS4-OpenGNM/opengnm.git /tmp/opengnm && \
+    cd /tmp/opengnm && git checkout c51243f333a1a964894903da080a508f7af4d91f && \
+    cp config.orbis.mak config.mak && \
+    make -j2 lib CC=clang AR=ar && \
+    make install-headers install-lib CC=clang AR=ar DESTDIR="$PS4_DEPS" INCDIR=/include LIBDIR=/lib && \
+    mkdir -p /opt/ps4/licenses && cp LICENSE /opt/ps4/licenses/opengnm && \
+    git clone https://github.com/PS4-OpenGNM/freegnm-examples.git /tmp/freegnm-examples && \
+    cd /tmp/freegnm-examples && git checkout ffd055563e5b849ebef1b276ba29e730199670f8 && \
+    mkdir -p "$FREEGNM_EXAMPLES/shared" && \
+    cp -a shared/src "$FREEGNM_EXAMPLES/shared/" && \
+    cp LICENSE "$FREEGNM_EXAMPLES/" && \
+    rm -rf /tmp/opengnm /tmp/freegnm-examples
+
+RUN curl -fL --retry 3 -o /tmp/mpg123.tar.bz2 \
+      https://www.mpg123.de/download/mpg123-1.33.4.tar.bz2 && \
+    echo '3ae8c9ff80a97bfc0e22e89fbcd74687eca4fc1db315b12607f27f01cb5a47d9  /tmp/mpg123.tar.bz2' | sha256sum -c - && \
+    tar -xjf /tmp/mpg123.tar.bz2 -C /tmp && \
+    cd /tmp/mpg123-1.33.4 && \
+    CC="clang --target=x86_64-pc-freebsd12-elf -isysroot $OO_PS4_TOOLCHAIN -isystem $OO_PS4_TOOLCHAIN/include" \
+    CFLAGS='-O2 -fPIC' AR=ar RANLIB=ranlib \
+    LDFLAGS="-fuse-ld=lld -nostdlib -Wl,-m,elf_x86_64,-pie,--script=$OO_PS4_TOOLCHAIN/link.x,--eh-frame-hdr -L$OO_PS4_TOOLCHAIN/lib $OO_PS4_TOOLCHAIN/lib/crt1.o" \
+    LIBS='-lm -lc -lkernel' \
+    ./configure --host=x86_64-unknown-freebsd --prefix="$PS4_DEPS" \
+      --disable-shared --enable-static --with-cpu=generic --disable-network \
+      --disable-ipv6 --disable-components --enable-libmpg123 && \
+    make -j2 && make install && \
+    cp COPYING /opt/ps4/licenses/mpg123 && \
+    rm -rf /tmp/mpg123-1.33.4 /tmp/mpg123.tar.bz2
+
+COPY --from=ps4-shaders /out/psbc /opt/ps4/libexec/psbc
+COPY --from=ps4-shaders /out/LICENSE /opt/ps4/licenses/psbc
+RUN mkdir -p /opt/ps4/bin && \
+    if [ "$TARGETARCH" = arm64 ]; then \
+      printf '#!/bin/sh\nexec qemu-x86_64 /opt/ps4/libexec/psbc "$@"\n' > /opt/ps4/bin/psbc; \
+      chmod +x /opt/ps4/bin/psbc; \
+    else ln -s ../libexec/psbc /opt/ps4/bin/psbc; fi
+
+RUN clang --version && ld.lld --version && glslangValidator --version && \
+    test -x "$PSBC" && \
+    test -x "$OO_PS4_TOOLCHAIN/bin/linux/create-fself" && \
+    test -x "$OO_PS4_TOOLCHAIN/bin/linux/create-gp4" && \
+    test -x "$OO_PS4_TOOLCHAIN/bin/linux/PkgTool.Core" && \
+    test -f "$PS4_DEPS/lib/libopengnm.a" && \
+    test -f "$PS4_DEPS/lib/libmpg123.a"
+
+# Package the examples' shared utilities once as an installed dependency.
+RUN mkdir -p /tmp/freegnm-helpers "$PS4_DEPS/include/freegnm-helpers" && \
+    for helper in u/fs u/utility displayctx memalloc misc; do \
+      clang --target=x86_64-pc-freebsd12-elf -isysroot "$OO_PS4_TOOLCHAIN" \
+        -isystem "$OO_PS4_TOOLCHAIN/include" -I"$PS4_DEPS/include/opengnm" \
+        -I"$FREEGNM_EXAMPLES/shared/src" -DUSE_OPENGNM -DSTB_IMAGE_STATIC \
+        -O2 -fPIC -ffunction-sections -fdata-sections \
+        -c "$FREEGNM_EXAMPLES/shared/src/$helper.c" -o "/tmp/freegnm-helpers/${helper##*/}.o" || exit 1; \
+    done && \
+    ar rcs "$PS4_DEPS/lib/libfreegnm-helpers.a" /tmp/freegnm-helpers/*.o && \
+    cd "$FREEGNM_EXAMPLES/shared/src" && \
+    find . -name '*.h' -exec cp --parents '{}' "$PS4_DEPS/include/freegnm-helpers/" \; && \
+    cp "$FREEGNM_EXAMPLES/LICENSE" /opt/ps4/licenses/freegnm-examples && \
+    rm -rf /tmp/freegnm-helpers
+
+RUN printf '#version 450\nvoid main() { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n' > /tmp/ps4-check.vert && \
+    glslangValidator -V -S vert /tmp/ps4-check.vert -o /tmp/ps4-check.spv && \
+    "$PSBC" -s vertex /tmp/ps4-check.spv /tmp/ps4-check.sb && \
+    test -s /tmp/ps4-check.sb && \
+    "$OO_PS4_TOOLCHAIN/bin/linux/PkgTool.Core" sfo_new /tmp/ps4-check.sfo && \
+    rm /tmp/ps4-check.vert /tmp/ps4-check.spv /tmp/ps4-check.sb /tmp/ps4-check.sfo
 
 FROM native AS ppsspp
 
@@ -145,6 +285,15 @@ RUN mkdir -p /opt/foreign/usr/lib /opt/foreign/usr/include /opt/foreign/lib && \
 FROM native
 
 ARG TARGETARCH
+
+ENV OO_PS4_TOOLCHAIN=/opt/ps4/sdk
+ENV PS4_DEPS=/opt/ps4/portlibs
+ENV PSBC=/opt/ps4/bin/psbc
+ENV PATH="/opt/ps4/bin:${PATH}"
+
+COPY --from=ps4 /opt/ps4/ /opt/ps4/
+
+RUN if [ "$TARGETARCH" = arm64 ]; then apt-get update && apt-get install -y qemu-user; fi
 
 ENV PS2DEV=/usr/local/ps2dev
 ENV PS2SDK=/usr/local/ps2dev/ps2sdk
