@@ -6,7 +6,10 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
     clang clang-tools lld glslang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
-    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0
+    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0 \
+    mesa-vulkan-drivers vulkan-tools libvulkan1 libasound2t64 libpulse0 libudev1 \
+    libx11-6 libxext6 libxrandr2 libxcursor1 libxi6 libxss1 libxtst6 libxkbcommon0 \
+    libwayland-client0 libwayland-cursor0 libwayland-egl1 libdecor-0-0
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
@@ -162,6 +165,30 @@ RUN git clone --depth 1 --branch v1.17.1 --recurse-submodules \
     ./b.sh --headless && \
     test -x build/PPSSPPHeadless && \
     test -d build/assets
+
+FROM native AS shadps4
+
+ARG TARGETARCH
+
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      curl -fL --retry 3 -o /tmp/shadps4.zip \
+        https://github.com/shadps4-emu/shadPS4/releases/download/v.0.18.0/shadps4-linux-sdl-0.18.0.zip && \
+      echo '3cf0f669c089411775a2434a41ca9c391fb7d24c1a1521ee45dd1d36f390c4a4  /tmp/shadps4.zip' | sha256sum -c - && \
+      unzip -q /tmp/shadps4.zip -d /tmp && \
+      image_offset="$(python3 -c 'import struct; h=open("/tmp/Shadps4-sdl.AppImage","rb").read(64); assert h[:6] == b"\x7fELF\x02\x01"; print(struct.unpack_from("<Q",h,40)[0] + struct.unpack_from("<H",h,58)[0] * struct.unpack_from("<H",h,60)[0])')" && \
+      unsquashfs -no-progress -offset "$image_offset" -d /opt/shadps4 /tmp/Shadps4-sdl.AppImage && \
+      test -x /opt/shadps4/AppRun && \
+      python3 -c 'import struct; h=open("/opt/shadps4/usr/bin/shadps4","rb").read(64); assert h[:6] == b"\x7fELF\x02\x01" and struct.unpack_from("<H",h,18)[0] == 62' && \
+      rm /tmp/shadps4.zip /tmp/Shadps4-sdl.AppImage; \
+    else mkdir -p /opt/shadps4; fi
+
+COPY config/shadps4.json /opt/shadps4/profile/config.json
+
+RUN for user in 1000 1001 1002 1003; do \
+      mkdir -p "/opt/shadps4/profile/home/$user/savedata" \
+        "/opt/shadps4/profile/home/$user/trophy" \
+        "/opt/shadps4/profile/home/$user/inputs"; \
+    done
 
 FROM devkitpro/devkitarm AS devkitarm
 
@@ -378,6 +405,9 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
     rm /tmp/pspdev.tar.gz && \
     test -x /opt/pspdev/bin/psp-config && \
     test -f /opt/pspdev/psp/sdk/lib/libpspmath.a
+
+ENV SHADPS4_BIN=/opt/shadps4/AppRun
+COPY --from=shadps4 /opt/shadps4/ /opt/shadps4/
 
 COPY --from=ppsspp /opt/ppsspp/build/PPSSPPHeadless /opt/ppsspp/PPSSPPHeadless
 COPY --from=ppsspp /opt/ppsspp/build/assets/ /opt/ppsspp/assets/
