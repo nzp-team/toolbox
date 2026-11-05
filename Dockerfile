@@ -190,6 +190,27 @@ RUN for user in 1000 1001 1002 1003; do \
         "/opt/shadps4/profile/home/$user/inputs"; \
     done
 
+FROM native AS pcsx2
+
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mtools dosfstools libaio1t64 && rm -rf /var/lib/apt/lists/*
+
+COPY config/pcsx2-usb-sync.c /tmp/pcsx2-usb-sync.c
+
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      curl -fL --retry 3 -o /tmp/pcsx2.AppImage \
+        https://github.com/PCSX2/pcsx2/releases/download/v2.4.0/pcsx2-v2.4.0-linux-appimage-x64-Qt.AppImage && \
+      echo '2d5061f4f2906f22befc719aac3acebd2699fb07c611bc90709780e28dea8c8e  /tmp/pcsx2.AppImage' | sha256sum -c - && \
+      image_offset="$(python3 -c 'import struct; h=open("/tmp/pcsx2.AppImage","rb").read(64); assert h[:6] == b"\x7fELF\x02\x01"; print(struct.unpack_from("<Q",h,40)[0] + struct.unpack_from("<H",h,58)[0] * struct.unpack_from("<H",h,60)[0])')" && \
+      unsquashfs -no-progress -offset "$image_offset" -d /opt/pcsx2 /tmp/pcsx2.AppImage && \
+      cc -shared -fPIC -O2 -Wall -Wextra -Werror /tmp/pcsx2-usb-sync.c -ldl -o /opt/pcsx2/usb-sync.so && \
+      test -x /opt/pcsx2/AppRun && \
+      rm /tmp/pcsx2.AppImage; \
+    else mkdir -p /opt/pcsx2; fi && \
+    rm /tmp/pcsx2-usb-sync.c
+
 FROM devkitpro/devkitarm AS devkitarm
 
 FROM devkitpro/devkita64 AS devkita64
@@ -239,6 +260,17 @@ RUN case "$TARGETARCH" in \
     test -f "$PS2SDK/ee/lib/libpacket2.a" && \
     test -f "$PS2SDK/ports/include/mpg123.h" && \
     test -f "$PS2SDK/ports/lib/libmpg123.a"
+
+RUN curl -fL --retry 3 -o /tmp/mmceman.tar.gz \
+      https://codeload.github.com/ps2-mmce/mmceman/tar.gz/de28936fdf45fe445554cfa0b8f058b05fa8212f && \
+    echo 'dcf41e87681a7b5c9df0a1f3aee6e689a9ab7805faaa92841214671f28223b2c  /tmp/mmceman.tar.gz' | sha256sum -c - && \
+    mkdir /tmp/mmceman && \
+    tar -xzf /tmp/mmceman.tar.gz -C /tmp/mmceman --strip-components=1 && \
+    make -C /tmp/mmceman/mmceman && \
+    cp /tmp/mmceman/mmceman/irx/mmceman.irx "$PS2SDK/iop/irx/" && \
+    mkdir -p "$PS2SDK/share/licenses" && \
+    cp /tmp/mmceman/LICENSE "$PS2SDK/share/licenses/mmceman.txt" && \
+    rm -rf /tmp/mmceman /tmp/mmceman.tar.gz
 
 FROM ubuntu:24.04 AS ndless
 
@@ -405,6 +437,12 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
     rm /tmp/pspdev.tar.gz && \
     test -x /opt/pspdev/bin/psp-config && \
     test -f /opt/pspdev/psp/sdk/lib/libpspmath.a
+
+ENV PCSX2_BIN=/opt/pcsx2/AppRun
+COPY --from=pcsx2 /opt/pcsx2/ /opt/pcsx2/
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mtools dosfstools libaio1t64 && rm -rf /var/lib/apt/lists/*
 
 ENV SHADPS4_BIN=/opt/shadps4/AppRun
 COPY --from=shadps4 /opt/shadps4/ /opt/shadps4/
