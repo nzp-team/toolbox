@@ -1,0 +1,18 @@
+{
+    "General": {
+        "show_splash": false,
+        "discord_rpc_enabled": false
+    },
+    "GPU": {
+        "window_width": 1920,
+        "window_height": 1080,
+        "internal_screen_width": 1920,
+        "internal_screen_height": 1080,
+        "null_gpu": false,
+        "full_screen": true,
+        "rcas_enabled": false
+    },
+    "Vulkan": {
+        "renderdoc_enabled": false
+    }
+}
