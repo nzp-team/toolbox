@@ -1,0 +1,83 @@
+diff --git a/gles_private.h b/gles_private.h
+--- a/gles_private.h
++++ b/gles_private.h
+@@ -6,6 +6,7 @@
+ #include <GLES/glext.h>
+ #include <arena.h>
+ #include <stdarg.h>
++#include <stddef.h>
+ #include <stdint.h>
+ 
+ #define GLI_MIN(a, b)       (((a)) < ((b)) ? (a) : (b))
+@@ -351,12 +352,25 @@
+     GLfloat alpha_scale;
+ } texture_unit_t;
+ 
++// Exact inputs to combiner_set_texture_env; texture addresses and dirty flags
++// do not affect the generated register program. Keep this cache per context.
++#define GLI_COMBINER_ENV_BYTES (sizeof(texture_unit_t) - offsetof(texture_unit_t, tex_env_mode))
++typedef struct
++{
++    unsigned char environment[GLI_MAX_TEXTURE_UNITS][GLI_COMBINER_ENV_BYTES];
++    GLboolean active[GLI_MAX_TEXTURE_UNITS];
++    GLboolean clip[GLI_MAX_CLIP_PLANES];
++    GLboolean point_sprite, fog, lighting;
++} combiner_state_t;
++
+ typedef struct
+ {
+     GLenum server_active_texture;
+     texture_unit_t texture_units[GLI_MAX_TEXTURE_UNITS];
+     texture_object_t *texture_objects;
+     texture_object_t *texture_lookup[256];
++    combiner_state_t combiner_state;
++    GLboolean combiner_state_valid;
+     GLboolean combiner_dirty; // Gates combiner_set_texture_env() rebuild
+ } texture_environment_t;
+ 
+diff --git a/nv2a_helper.c b/nv2a_helper.c
+--- a/nv2a_helper.c
++++ b/nv2a_helper.c
+@@ -607,10 +607,42 @@
+ #define NV097_SET_SHADER_STAGE_PROGRAM_STAGEn_CUBE_MAP      NV097_SET_SHADER_STAGE_PROGRAM_STAGE0_CUBE_MAP
+ #define NV097_SET_SHADER_STAGE_PROGRAM_STAGEn_3D_PROJECTIVE NV097_SET_SHADER_STAGE_PROGRAM_STAGE0_3D_PROJECTIVE
+ 
++static GLboolean combiner_state_unchanged(gli_context_t *context)
++{
++    combiner_state_t state = {0};
++    texture_environment_t *env = &context->texture_environment;
++    for (GLuint i = 0; i < GLI_MAX_TEXTURE_UNITS; ++i) {
++        const texture_unit_t *unit = &env->texture_units[i];
++        state.active[i] = unit->texture_2d_enabled && unit->bound_texture_object &&
++            unit->bound_texture_object != &unit->unbound_texture_object &&
++            gliTextureObjectIsComplete(unit->bound_texture_object);
++        memcpy(state.environment[i], &unit->tex_env_mode, GLI_COMBINER_ENV_BYTES);
++    }
++    for (GLuint i = 0; i < GLI_MAX_CLIP_PLANES; ++i) {
++        state.clip[i] = context->transformation_state.clip_plane_enabled[i];
++        // The clipping path also uploads plane equations and consumes dirty state.
++        // Let it run whenever enabled, including coefficient-only changes.
++        if (state.clip[i]) {
++            env->combiner_state_valid = GL_FALSE;
++            return GL_FALSE;
++        }
++    }
++    state.point_sprite = context->rasterization_state.point_sprite_oes_enabled;
++    state.fog = context->coloring_state.fog_enabled;
++    state.lighting = context->lighting_state.lighting_enabled;
++    if (env->combiner_state_valid && !memcmp(&state, &env->combiner_state, sizeof(state)))
++        return GL_TRUE;
++    env->combiner_state = state;
++    env->combiner_state_valid = GL_TRUE;
++    return GL_FALSE;
++}
++
+ void combiner_set_texture_env(void)
+ {
+     gli_context_t *context = gliGetContext();
+     uint32_t *pb;
++
++    if (combiner_state_unchanged(context)) return;
+ 
+     DWORD shader_program[4] = {
+         NV097_SET_SHADER_STAGE_PROGRAM_STAGEn_PROGRAM_NONE,

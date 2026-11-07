@@ -1,0 +1,140 @@
+diff --git a/gles_private.h b/gles_private.h
+--- a/gles_private.h
++++ b/gles_private.h
+@@ -189,6 +189,8 @@
+     GLuint buffer_size;
+     GLenum buffer_usage;
+     void *buffer_data;
++    GLboolean mapped;
++    GLboolean gpu_used;
+     struct buffer_object *next;
+ } buffer_object_t;
+ 
+diff --git a/gles_buffers.c b/gles_buffers.c
+--- a/gles_buffers.c
++++ b/gles_buffers.c
+@@ -53,6 +53,7 @@
+     // instead
+     if (buffer_binding != 0) {
+         buffer_object_t *buffer = gliFindBufferObject(buffer_binding, NULL);
++        buffer->gpu_used = GL_TRUE;
+         return (GLvoid *)((uintptr_t)buffer->buffer_data + (uintptr_t)ptr);
+     } else {
+         return (GLvoid *)ptr;
+@@ -230,6 +231,9 @@
+         gliSetError(GL_INVALID_VALUE);
+         return;
+     }
++
++    buffer_object->mapped = GL_FALSE;
++    buffer_object->gpu_used = GL_FALSE;
+ 
+     // Any pre-existing data store is deleted
+     if (buffer_object->buffer_data) {
+@@ -279,7 +283,7 @@
+     }
+ 
+     buffer_object_t *buffer_object = gliFindBufferObject(*binding, NULL);
+-    if (buffer_object == NULL || buffer_object->buffer_data == NULL) {
++    if (buffer_object == NULL || buffer_object->buffer_data == NULL || buffer_object->mapped) {
+         gliSetError(GL_INVALID_OPERATION);
+         return;
+     }
+@@ -291,6 +295,10 @@
+     }
+ 
+     gli_memcpy((uint8_t *)buffer_object->buffer_data + offset, data, size);
++    __asm__ volatile("sfence" ::: "memory");
++    uint32_t *pb = pb_begin();
++    pb = pb_push1(pb, NV097_BREAK_VERTEX_BUFFER_CACHE, 0);
++    pb_end(pb);
+ }
+ 
+ GL_API void GL_APIENTRY glGetBufferParameteriv(GLenum target, GLenum pname, GLint *params)
+@@ -318,6 +326,12 @@
+         case GL_BUFFER_SIZE:
+             *params = (GLint)buffer_object->buffer_size;
+             break;
++        case GL_BUFFER_ACCESS_OES:
++            *params = GL_WRITE_ONLY_OES;
++            break;
++        case GL_BUFFER_MAPPED_OES:
++            *params = buffer_object->mapped;
++            break;
+         case GL_BUFFER_USAGE:
+             *params = (GLint)buffer_object->buffer_usage;
+             break;
+@@ -336,3 +350,62 @@
+     }
+     return GL_TRUE;
+ }
++
++GL_API void *GL_APIENTRY glMapBufferOES(GLenum target, GLenum access)
++{
++    GLuint *binding = get_binding_ptr(target);
++    if (!binding || access != GL_WRITE_ONLY_OES) {
++        gliSetError(GL_INVALID_ENUM);
++        return NULL;
++    }
++    buffer_object_t *buffer = gliFindBufferObject(*binding, NULL);
++    if (!buffer || buffer->mapped) {
++        gliSetError(GL_INVALID_OPERATION);
++        return NULL;
++    }
++    // Mapping permits overwriting old bytes, so previous GPU reads must finish.
++    if (buffer->gpu_used) {
++        while (pb_busy()) {
++            NtYieldExecution();
++        }
++        buffer->gpu_used = GL_FALSE;
++    }
++    buffer->mapped = GL_TRUE;
++    return buffer->buffer_data;
++}
++
++GL_API GLboolean GL_APIENTRY glUnmapBufferOES(GLenum target)
++{
++    GLuint *binding = get_binding_ptr(target);
++    if (!binding) {
++        gliSetError(GL_INVALID_ENUM);
++        return GL_FALSE;
++    }
++    buffer_object_t *buffer = gliFindBufferObject(*binding, NULL);
++    if (!buffer || !buffer->mapped) {
++        gliSetError(GL_INVALID_OPERATION);
++        return GL_FALSE;
++    }
++    // The stock Xbox supports SSE1: SFENCE publishes write-combined CPU stores.
++    __asm__ volatile("sfence" ::: "memory");
++    buffer->mapped = GL_FALSE;
++    uint32_t *pb = pb_begin();
++    pb = pb_push1(pb, NV097_BREAK_VERTEX_BUFFER_CACHE, 0);
++    pb_end(pb);
++    return GL_TRUE;
++}
++
++GL_API void GL_APIENTRY glGetBufferPointervOES(GLenum target, GLenum pname, void **params)
++{
++    GLuint *binding = get_binding_ptr(target);
++    if (!binding || pname != GL_BUFFER_MAP_POINTER_OES) {
++        gliSetError(GL_INVALID_ENUM);
++        return;
++    }
++    buffer_object_t *buffer = gliFindBufferObject(*binding, NULL);
++    if (!buffer) {
++        gliSetError(GL_INVALID_OPERATION);
++        return;
++    }
++    *params = buffer->mapped ? buffer->buffer_data : NULL;
++}
+diff --git a/include/GLES/glext.h b/include/GLES/glext.h
+--- a/include/GLES/glext.h
++++ b/include/GLES/glext.h
+@@ -48,7 +48,6 @@
+ #define GL_OES_fbo_render_mipmap 0
+ #define GL_OES_fixed_point 0
+ // #define GL_OES_framebuffer_object 0
+-#define GL_OES_mapbuffer 0
+ #define GL_OES_matrix_get 0
+ #define GL_OES_matrix_palette 0
+ // #define GL_OES_packed_depth_stencil 0
