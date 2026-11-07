@@ -31,23 +31,33 @@ RUN case "$BUILDARCH" in \
     cd /tmp/psbc && git checkout 3b1ea85bc25315d6e611f58f51a8639003a291e8 && \
     curl -fL --retry 3 -o /tmp/translate-c.tar.gz \
       https://codeberg.org/ziglang/translate-c/archive/3da873cacdd7e9190fe1cf40372ddf5387c970ea.tar.gz && \
-    translate_pkg=translate_c-0.0.0-Q_BUWktLBwBO7VLbmrOKUcAMRtE5fmOxI35189X5XbJs && \
-    test "$(/tmp/zig/zig fetch /tmp/translate-c.tar.gz)" = "$translate_pkg" && \
     curl -fL --retry 3 -o /tmp/arocc.tar.gz \
       https://codeberg.org/ziglang/arocc/archive/a4e99cedda3bff1e3a3a388e9f6ed05bbd36e441.tar.gz && \
-    aro_pkg=aro-0.0.0-JSD1QllKNwBfEKDTpieRPt0mp_0RCJUOEAFBUdGHGXFl && \
-    test "$(/tmp/zig/zig fetch /tmp/arocc.tar.gz)" = "$aro_pkg" && \
+    curl -fL --retry 3 -o /tmp/freegnm.tar.gz \
+      https://codeload.github.com/lateleite/freegnm/tar.gz/d0fe672b7f013f2bcbcc70ba234fbbd29ac0f32a && \
+    curl -fL --retry 3 -o /tmp/mesa.tar.xz https://archive.mesa3d.org/mesa-26.1.7.tar.xz
+
+RUN --network=none cd /tmp/psbc && \
     mkdir /tmp/psbc-packages && \
-    for package in "$translate_pkg" "$aro_pkg"; do \
+    for entry in \
+      "arocc.tar.gz:aro-0.0.0-JSD1QllKNwBfEKDTpieRPt0mp_0RCJUOEAFBUdGHGXFl" \
+      "translate-c.tar.gz:translate_c-0.0.0-Q_BUWktLBwBO7VLbmrOKUcAMRtE5fmOxI35189X5XbJs" \
+      "freegnm.tar.gz:freegnm-0.1.0-zGkH591YIwAIl8eTD7NxzmcDqGHyMCAO3Nj4367B6QXG" \
+      "mesa.tar.xz:N-V-__8AAM8qKhaobU6Rm--zBDi_FmW5vSYSD2RGPhrV7sQE"; do \
+      archive="${entry%%:*}"; package="${entry#*:}"; \
+      actual="$(/tmp/zig/zig fetch "/tmp/$archive")" || exit 1; \
+      if [ "$actual" != "$package" ]; then \
+        echo "Unexpected Zig package hash for $archive: $actual" >&2; exit 1; \
+      fi; \
       mkdir "/tmp/psbc-packages/$package" && \
-      tar -xzf "/root/.cache/zig/p/$package.tar.gz" \
-        -C "/tmp/psbc-packages/$package" --strip-components=1 || exit 1; \
+      tar -xf "/tmp/$archive" -C "/tmp/psbc-packages/$package" --strip-components=1 || exit 1; \
     done && \
     /tmp/zig/zig build --pkg-dir /tmp/psbc-packages --release=fast -Dtarget=x86_64-linux-musl -j2 && \
     git diff --exit-code HEAD -- && \
     mkdir -p /out && cp zig-out/bin/psbc /out/ && \
     cp LICENSE /out/ && \
-    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/translate-c.tar.gz /tmp/arocc.tar.gz /tmp/psbc-packages /tmp/psbc /root/.cache/zig
+    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/translate-c.tar.gz /tmp/arocc.tar.gz \
+      /tmp/freegnm.tar.gz /tmp/mesa.tar.xz /tmp/psbc-packages /tmp/psbc /root/.cache/zig
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS ps4-pkgtool
 
