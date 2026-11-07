@@ -1,0 +1,129 @@
+diff --git a/gles_private.h b/gles_private.h
+--- a/gles_private.h
++++ b/gles_private.h
+@@ -354,6 +354,7 @@
+     GLenum server_active_texture;
+     texture_unit_t texture_units[GLI_MAX_TEXTURE_UNITS];
+     texture_object_t *texture_objects;
++    texture_object_t *texture_lookup[256];
+     GLboolean combiner_dirty; // Gates combiner_set_texture_env() rebuild
+ } texture_environment_t;
+ 
+@@ -474,6 +475,7 @@
+     current_values_t current_values;
+     vertex_array_data_t vertex_array_data;
+     buffer_object_t *buffer_objects;
++    buffer_object_t *buffer_lookup[256];
+     transformation_state_t transformation_state;
+     coloring_state_t coloring_state;
+     lighting_state_t lighting_state;
+diff --git a/gles_buffers.c b/gles_buffers.c
+--- a/gles_buffers.c
++++ b/gles_buffers.c
+@@ -12,8 +12,16 @@
+         return NULL;
+     }
+ 
++    // Repeated binds must not walk every loaded object. Deletion still walks
++    // the list to return its predecessor and invalidates the matching cache slot.
++    buffer_object_t **cached = &context->buffer_lookup[name & 255];
++    if (!prev && *cached && (*cached)->buffer_name == name) {
++        return *cached;
++    }
++
+     for (buffer_object_t *it = g_buffers_head; it != NULL; it = it->next) {
+         if (it->buffer_name == name) {
++            *cached = it;
+             return it;
+         }
+         if (prev) {
+@@ -132,6 +140,7 @@
+         buffer_object_t *prev = NULL; // Track previous for linked list removal
+         buffer_object_t *buf = gliFindBufferObject(name, &prev);
+         if (buf) {
++            context->buffer_lookup[name & 255] = NULL;
+             // Remove from the context's list
+             if (prev) {
+                 prev->next = buf->next;
+diff --git a/gles_texture.c b/gles_texture.c
+--- a/gles_texture.c
++++ b/gles_texture.c
+@@ -32,10 +32,18 @@
+ 
+     if (name == 0) {
+         return NULL;
++    }
++
++    // Repeated binds must not walk every loaded object. Deletion still walks
++    // the list to return its predecessor and invalidates the matching cache slot.
++    texture_object_t **cached = &context->texture_environment.texture_lookup[name & 255];
++    if (!prev && *cached && (*cached)->texture_name == name) {
++        return *cached;
+     }
+ 
+     for (texture_object_t *it = g_textures_head; it != NULL; it = it->next) {
+         if (it->texture_name == name) {
++            *cached = it;
+             return it;
+         }
+         if (prev) {
+@@ -202,6 +210,7 @@
+         texture_object_t *prev = NULL; // Track previous for linked list removal
+         texture_object_t *texture_object = gliFindTextureObject(name, &prev);
+         if (texture_object) {
++            context->texture_environment.texture_lookup[name & 255] = NULL;
+             // Remove from the context's list
+             if (prev) {
+                 prev->next = texture_object->next;
+@@ -1280,9 +1289,51 @@
+     const GLubyte *source = (const GLubyte *)pixels;
+     GLubyte *destination = xgu_texture->data + level_offset;
+ 
++    // Scatter into cached scratch, then write complete 8x8 Morton tiles in
++    // contiguous bursts. Per-pixel writes to write-combined GPU memory flush
++    // partial cache lines, which is particularly expensive for dynamic lightmaps.
++    GLint tile_x0 = (xoff + 7) & ~7;
++    GLint tile_y0 = (yoff + 7) & ~7;
++    GLint tile_x1 = (xoff + w) & ~7;
++    GLint tile_y1 = (yoff + h) & ~7;
++    GLboolean tiled = xgu_texture->swizzled && storage_width >= 8 && storage_height >= 8;
++    if (tiled) {
++        static const unsigned char spread[8] = {0, 1, 4, 5, 16, 17, 20, 21};
++        GLubyte tile[8 * 8 * 4];
++        for (GLint ty = tile_y0; ty < tile_y1; ty += 8) {
++            for (GLint tx = tile_x0; tx < tile_x1; tx += 8) {
++                for (GLint y = 0; y < 8; ++y) {
++                    const GLubyte *src = source + (size_t)(ty + y - yoff) * source_pitch +
++                                         (size_t)(tx - xoff) * source_bytes_per_pixel;
++                    for (GLint x = 0; x < 8; ++x) {
++                        GLubyte *dst = tile + (spread[x] | (spread[y] << 1)) * storage_bytes_per_pixel;
++                        if (type == GL_UNSIGNED_BYTE && (format == GL_RGB || format == GL_RGBA)) {
++                            dst[0] = src[2];
++                            dst[1] = src[1];
++                            dst[2] = src[0];
++                            dst[3] = format == GL_RGBA ? src[3] : 0xff;
++                        } else {
++                            for (GLuint byte = 0; byte < storage_bytes_per_pixel; ++byte) {
++                                dst[byte] = src[byte];
++                            }
++                        }
++                        src += source_bytes_per_pixel;
++                    }
++                }
++                size_t offset = texture_swizzled_pixel_offset(storage_width, storage_height, tx, ty);
++                gli_memcpy(destination + offset * storage_bytes_per_pixel, tile, 64 * storage_bytes_per_pixel);
++            }
++        }
++    }
++
+     for (GLint row = 0; row < h; row++) {
+         const GLubyte *source_row = source + (size_t)row * source_pitch;
+         for (GLint column = 0; column < w; column++) {
++            if (tiled && row + yoff >= tile_y0 && row + yoff < tile_y1 &&
++                column + xoff >= tile_x0 && column + xoff < tile_x1) {
++                column = tile_x1 - xoff - 1;
++                continue;
++            }
+             GLubyte *destination_pixel = NULL;
+             if (xgu_texture->swizzled) {
+                 size_t swizzle_index = texture_swizzled_pixel_offset(
