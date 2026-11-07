@@ -29,11 +29,25 @@ RUN case "$BUILDARCH" in \
     mkdir /tmp/zig && tar -xJf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1 && \
     git clone https://github.com/lateleite/psbc.git /tmp/psbc && \
     cd /tmp/psbc && git checkout 3b1ea85bc25315d6e611f58f51a8639003a291e8 && \
-    /tmp/zig/zig build --release=fast -Dtarget=x86_64-linux-musl -j2 && \
+    curl -fL --retry 3 -o /tmp/translate-c.tar.gz \
+      https://codeberg.org/ziglang/translate-c/archive/3da873cacdd7e9190fe1cf40372ddf5387c970ea.tar.gz && \
+    translate_pkg=translate_c-0.0.0-Q_BUWktLBwBO7VLbmrOKUcAMRtE5fmOxI35189X5XbJs && \
+    test "$(/tmp/zig/zig fetch /tmp/translate-c.tar.gz)" = "$translate_pkg" && \
+    curl -fL --retry 3 -o /tmp/arocc.tar.gz \
+      https://codeberg.org/ziglang/arocc/archive/a4e99cedda3bff1e3a3a388e9f6ed05bbd36e441.tar.gz && \
+    aro_pkg=aro-0.0.0-JSD1QllKNwBfEKDTpieRPt0mp_0RCJUOEAFBUdGHGXFl && \
+    test "$(/tmp/zig/zig fetch /tmp/arocc.tar.gz)" = "$aro_pkg" && \
+    mkdir /tmp/psbc-packages && \
+    for package in "$translate_pkg" "$aro_pkg"; do \
+      mkdir "/tmp/psbc-packages/$package" && \
+      tar -xzf "/root/.cache/zig/p/$package.tar.gz" \
+        -C "/tmp/psbc-packages/$package" --strip-components=1 || exit 1; \
+    done && \
+    /tmp/zig/zig build --pkg-dir /tmp/psbc-packages --release=fast -Dtarget=x86_64-linux-musl -j2 && \
     git diff --exit-code HEAD -- && \
     mkdir -p /out && cp zig-out/bin/psbc /out/ && \
     cp LICENSE /out/ && \
-    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/psbc /root/.cache/zig
+    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/translate-c.tar.gz /tmp/arocc.tar.gz /tmp/psbc-packages /tmp/psbc /root/.cache/zig
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS ps4-pkgtool
 
