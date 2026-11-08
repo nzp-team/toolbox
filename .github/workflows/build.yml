@@ -47,7 +47,7 @@ jobs:
           tags: ${{ steps.image.outputs.tag }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=toolbox-${{ matrix.arch }}
-          cache-to: type=gha,scope=toolbox-${{ matrix.arch }},mode=max
+          cache-to: type=gha,scope=toolbox-${{ matrix.arch }},mode=max,ignore-error=true
 
   publish-manifest:
     if: github.event_name == 'push'

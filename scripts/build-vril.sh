@@ -12,6 +12,7 @@ show_help() {
     echo "  linux-x86"
     echo "  linux-arm64"
     echo "  linux-armhf"
+    echo "  xbox"
     echo "  ps2"
     echo "  ps4"
     echo "  psp"
@@ -80,6 +81,9 @@ case "$TARGET" in
         MAKEFILE="Makefile.sdl"
         TARGET_ARGS=(BUILD=build/sdl/armhf CROSS_COMPILE=arm-linux-gnueabihf-)
         export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+        ;;
+    xbox)
+        MAKEFILE="Makefile.xbox"
         ;;
     ps2)
         MAKEFILE="Makefile.ps2"

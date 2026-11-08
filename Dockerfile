@@ -29,11 +29,35 @@ RUN case "$BUILDARCH" in \
     mkdir /tmp/zig && tar -xJf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1 && \
     git clone https://github.com/lateleite/psbc.git /tmp/psbc && \
     cd /tmp/psbc && git checkout 3b1ea85bc25315d6e611f58f51a8639003a291e8 && \
-    /tmp/zig/zig build --release=fast -Dtarget=x86_64-linux-musl -j2 && \
+    curl -fL --retry 3 -o /tmp/translate-c.tar.gz \
+      https://codeberg.org/ziglang/translate-c/archive/3da873cacdd7e9190fe1cf40372ddf5387c970ea.tar.gz && \
+    curl -fL --retry 3 -o /tmp/arocc.tar.gz \
+      https://codeberg.org/ziglang/arocc/archive/a4e99cedda3bff1e3a3a388e9f6ed05bbd36e441.tar.gz && \
+    curl -fL --retry 3 -o /tmp/freegnm.tar.gz \
+      https://codeload.github.com/lateleite/freegnm/tar.gz/d0fe672b7f013f2bcbcc70ba234fbbd29ac0f32a && \
+    curl -fL --retry 3 -o /tmp/mesa.tar.xz https://archive.mesa3d.org/mesa-26.1.7.tar.xz
+
+RUN --network=none cd /tmp/psbc && \
+    mkdir /tmp/psbc-packages && \
+    for entry in \
+      "arocc.tar.gz:aro-0.0.0-JSD1QllKNwBfEKDTpieRPt0mp_0RCJUOEAFBUdGHGXFl" \
+      "translate-c.tar.gz:translate_c-0.0.0-Q_BUWktLBwBO7VLbmrOKUcAMRtE5fmOxI35189X5XbJs" \
+      "freegnm.tar.gz:freegnm-0.1.0-zGkH591YIwAIl8eTD7NxzmcDqGHyMCAO3Nj4367B6QXG" \
+      "mesa.tar.xz:N-V-__8AAM8qKhaobU6Rm--zBDi_FmW5vSYSD2RGPhrV7sQE"; do \
+      archive="${entry%%:*}"; package="${entry#*:}"; \
+      actual="$(/tmp/zig/zig fetch "/tmp/$archive")" || exit 1; \
+      if [ "$actual" != "$package" ]; then \
+        echo "Unexpected Zig package hash for $archive: $actual" >&2; exit 1; \
+      fi; \
+      mkdir "/tmp/psbc-packages/$package" && \
+      tar -xf "/tmp/$archive" -C "/tmp/psbc-packages/$package" --strip-components=1 || exit 1; \
+    done && \
+    /tmp/zig/zig build --pkg-dir /tmp/psbc-packages --release=fast -Dtarget=x86_64-linux-musl -j2 && \
     git diff --exit-code HEAD -- && \
     mkdir -p /out && cp zig-out/bin/psbc /out/ && \
     cp LICENSE /out/ && \
-    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/psbc /root/.cache/zig
+    rm -rf /tmp/zig /tmp/zig.tar.xz /tmp/translate-c.tar.gz /tmp/arocc.tar.gz \
+      /tmp/freegnm.tar.gz /tmp/mesa.tar.xz /tmp/psbc-packages /tmp/psbc /root/.cache/zig
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS ps4-pkgtool
 
@@ -153,6 +177,77 @@ RUN printf '#version 450\nvoid main() { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); 
     "$OO_PS4_TOOLCHAIN/bin/linux/PkgTool.Core" sfo_new /tmp/ps4-check.sfo && \
     rm /tmp/ps4-check.vert /tmp/ps4-check.spv /tmp/ps4-check.sb /tmp/ps4-check.sfo
 
+FROM ubuntu:24.04 AS xbox
+
+ARG TARGETARCH
+
+ENV NXDK_DIR=/opt/nxdk
+ENV GLES_DIR=/opt/nxdk-gles11
+ENV MINIMP3_DIR=/opt/minimp3
+ENV PATH="/opt/nxdk/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake clang lld llvm bison flex ninja-build python3 git curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/XboxDev/nxdk.git "$NXDK_DIR" && \
+    cd "$NXDK_DIR" && git checkout 004fefbfe8fd93a5ea8ee9a95ff187b0f58ec8ed && \
+    git submodule update --init --recursive --depth 1 && \
+    make -j4 NXDK_ONLY=y NXDK_SDL= NXDK_CXX= && \
+    make clean-pdclib clean-pbkit NXDK_SDL= NXDK_CXX= && \
+    make -j4 "$NXDK_DIR/lib/libpdclib.lib" "$NXDK_DIR/lib/libpbkit.lib" NXDK_SDL= NXDK_CXX= \
+      CFLAGS="-O2 -fno-strict-aliasing" && \
+    make -j4 tools && \
+    test -f lib/nxdk_usb.lib && test -f lib/libnxdk_net.lib
+
+COPY config/nxdk-gles11.patch /tmp/nxdk-gles11.patch
+COPY config/nxdk-gles11-performance.patch /tmp/nxdk-gles11-performance.patch
+COPY config/nxdk-gles11-buffers.patch /tmp/nxdk-gles11-buffers.patch
+COPY config/nxdk-gles11-state.patch /tmp/nxdk-gles11-state.patch
+RUN git clone https://github.com/Ryzee119/nxdk-gles11.git "$GLES_DIR" && \
+    cd "$GLES_DIR" && git checkout 5a726e61f1af5c3e9682af2c833c9703cab5022e && \
+    git submodule update --init --recursive && git apply /tmp/nxdk-gles11.patch && \
+    git apply /tmp/nxdk-gles11-performance.patch && \
+    git apply /tmp/nxdk-gles11-buffers.patch && \
+    git apply /tmp/nxdk-gles11-state.patch && \
+    cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$NXDK_DIR/share/toolchain-nxdk.cmake" \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS_RELEASE="-O2 -fno-strict-aliasing" \
+      -DNXDK_GLES11_WITH_GL4ES=OFF && \
+    cmake --build build -j4 && \
+    grep -q -- "-O2" build/CMakeFiles/GLESv1_CM.dir/flags.make && \
+    git clone https://github.com/lieff/minimp3.git "$MINIMP3_DIR" && \
+    cd "$MINIMP3_DIR" && git checkout ea99364f61c14656440e8d77e9c233ccf3124633
+
+FROM ubuntu:24.04 AS xemu
+
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates python3 squashfs-tools && rm -rf /var/lib/apt/lists/*
+
+RUN case "$TARGETARCH" in \
+      amd64) arch=x86_64; digest=ac77363a599109194ba2af3caa695348d199f515cf1d0fde091beb629e0c3103;; \
+      arm64) arch=aarch64; digest=8d2598bab0680ddd36c2d15ecccb70523e29adb852cd75e35bc5943dc0eb4816;; \
+      *) exit 1;; esac && \
+    curl -fL --retry 3 -o /tmp/xemu.AppImage \
+      "https://github.com/xemu-project/xemu/releases/download/v0.8.136/xemu-0.8.136-$arch.AppImage" && \
+    echo "$digest  /tmp/xemu.AppImage" | sha256sum -c - && \
+    image_offset="$(python3 -c 'import struct; h=open("/tmp/xemu.AppImage","rb").read(64); assert h[:6] == b"\x7fELF\x02\x01"; print(struct.unpack_from("<Q",h,40)[0] + struct.unpack_from("<H",h,58)[0] * struct.unpack_from("<H",h,60)[0])')" && \
+    unsquashfs -no-progress -offset "$image_offset" -d /opt/xemu /tmp/xemu.AppImage && \
+    test -x /opt/xemu/AppRun && rm /tmp/xemu.AppImage
+
+# A focused image for developing and validating the Xbox tools without other SDKs.
+FROM xbox AS xbox-tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb xauth libgl1 libgl1-mesa-dri libegl1 libvulkan1 mesa-vulkan-drivers \
+    libsdl2-2.0-0 libgtk-3-0 libpulse0 libasound2t64 libslirp0 libepoxy0 ffmpeg unzip && \
+    rm -rf /var/lib/apt/lists/*
+ENV XEMU_BIN=/opt/xemu/AppRun
+COPY --from=xemu /opt/xemu/ /opt/xemu/
+COPY scripts/ /opt/scripts/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /opt/scripts/*.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
 FROM native AS ppsspp
 
 COPY config/ppsspp.patch /tmp/ppsspp.patch
@@ -228,6 +323,30 @@ RUN git clone https://github.com/Rinnegatamante/vitaGL.git /tmp/vitaGL && \
     make install && \
     rm -rf /tmp/vitaGL
 
+FROM ubuntu:24.04 AS psp
+
+ARG TARGETARCH
+ENV PSPDEV=/opt/pspdev
+ENV PATH="/opt/pspdev/bin:${PATH}"
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      archive=pspdev-ubuntu-latest-x86_64.tar.gz; \
+      digest=a86efe624e770005290919617859e9df24bd8fcd3e364f4587f23ec7364b0acd; \
+    else \
+      archive=pspdev-ubuntu-24.04-arm-arm64.tar.gz; \
+      digest=0638f5f32fe4354c70040f8ee987b2e7111a981e93499d3986d30b15d1fb8e61; \
+    fi && \
+    curl -fL --retry 3 -o /tmp/pspdev.tar.gz \
+      "https://github.com/pspdev/pspdev/releases/download/v20261001/$archive" && \
+    echo "$digest  /tmp/pspdev.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/pspdev.tar.gz -C /opt && \
+    rm /tmp/pspdev.tar.gz && \
+    test -x /opt/pspdev/bin/psp-config && \
+    test -f /opt/pspdev/psp/sdk/lib/libpspmath.a
+
+
 FROM ubuntu:24.04 AS ps2
 
 ARG TARGETARCH
@@ -290,6 +409,19 @@ WORKDIR /opt/ndless
 RUN make all -j"$(nproc)" && \
     rm -rf ndless-sdk/toolchain/build ndless-sdk/toolchain/download
 
+# Focused cross-platform validation images share the standard Toolbox commands.
+FROM xbox-tools AS psp-tools
+ENV PSPDEV=/opt/pspdev
+ENV PATH="/opt/pspdev/bin:${PATH}"
+COPY --from=psp /opt/pspdev/ /opt/pspdev/
+
+FROM xbox-tools AS ps2-tools
+ENV PS2DEV=/usr/local/ps2dev
+ENV PS2SDK=/usr/local/ps2dev/ps2sdk
+ENV GSKIT=/usr/local/ps2dev/gsKit
+ENV PATH="${PS2DEV}/bin:${PS2DEV}/ee/bin:${PS2DEV}/iop/bin:${PS2DEV}/dvp/bin:${PS2SDK}/bin:${PATH}"
+COPY --from=ps2 /usr/local/ps2dev/ /usr/local/ps2dev/
+
 FROM native AS cross-deps
 
 ARG TARGETARCH
@@ -344,6 +476,19 @@ RUN mkdir -p /opt/foreign/usr/lib /opt/foreign/usr/include /opt/foreign/lib && \
 FROM native
 
 ARG TARGETARCH
+
+ENV NXDK_DIR=/opt/nxdk
+ENV GLES_DIR=/opt/nxdk-gles11
+ENV MINIMP3_DIR=/opt/minimp3
+ENV XEMU_BIN=/opt/xemu/AppRun
+ENV PATH="/opt/nxdk/bin:${PATH}"
+COPY --from=xbox /opt/nxdk/ /opt/nxdk/
+COPY --from=xbox /opt/nxdk-gles11/ /opt/nxdk-gles11/
+COPY --from=xbox /opt/minimp3/ /opt/minimp3/
+COPY --from=xemu /opt/xemu/ /opt/xemu/
+RUN apt-get update && apt-get install -y --no-install-recommends llvm bison flex && \
+    rm -rf /var/lib/apt/lists/*
+
 
 ENV OO_PS4_TOOLCHAIN=/opt/ps4/sdk
 ENV PS4_DEPS=/opt/ps4/portlibs
@@ -423,20 +568,7 @@ RUN mkdir -p /opt/mingw-deps && \
     rm -rf /tmp/SDL2-2.32.10 /tmp/SDL2_mixer-2.8.2 \
       /tmp/SDL2-mingw.tar.gz /tmp/SDL2_mixer-mingw.tar.gz
 
-RUN if [ "$TARGETARCH" = amd64 ]; then \
-      archive=pspdev-ubuntu-latest-x86_64.tar.gz; \
-      digest=a86efe624e770005290919617859e9df24bd8fcd3e364f4587f23ec7364b0acd; \
-    else \
-      archive=pspdev-ubuntu-24.04-arm-arm64.tar.gz; \
-      digest=0638f5f32fe4354c70040f8ee987b2e7111a981e93499d3986d30b15d1fb8e61; \
-    fi && \
-    curl -fL --retry 3 -o /tmp/pspdev.tar.gz \
-      "https://github.com/pspdev/pspdev/releases/download/v20261001/$archive" && \
-    echo "$digest  /tmp/pspdev.tar.gz" | sha256sum -c - && \
-    tar -xzf /tmp/pspdev.tar.gz -C /opt && \
-    rm /tmp/pspdev.tar.gz && \
-    test -x /opt/pspdev/bin/psp-config && \
-    test -f /opt/pspdev/psp/sdk/lib/libpspmath.a
+COPY --from=psp /opt/pspdev/ /opt/pspdev/
 
 ENV PCSX2_BIN=/opt/pcsx2/AppRun
 COPY --from=pcsx2 /opt/pcsx2/ /opt/pcsx2/
