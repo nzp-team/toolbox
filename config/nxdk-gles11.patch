@@ -90,3 +90,30 @@ index 8f8aca5..ad0209d 100644
      DWORD shader_program[4] = {
          NV097_SET_SHADER_STAGE_PROGRAM_STAGEn_PROGRAM_NONE,
          NV097_SET_SHADER_STAGE_PROGRAM_STAGEn_PROGRAM_NONE,
+diff --git a/gles_core.c b/gles_core.c
+--- a/gles_core.c
++++ b/gles_core.c
+@@ -655,8 +655,8 @@
+     uint32_t *pb = pb_begin();
+     pb = combiner_specular_fog_config(pb, GL_FALSE, GL_FALSE);
+     pb = push_command_parameter(pb, NV097_SET_PROVOKING_VERTEX, NV097_SET_PROVOKING_VERTEX_LAST);
+-    // Initialize default fog plane (0, 0, 1, 0) matching MoInitKelvin:723 / vshader.cpp:1079
+-    pb = xgu_set_fog_plane(pb, 0.0f, 0.0f, 1.0f, 0.0f);
++    // OpenGL cameras look along negative eye-space Z; fog uses positive distance.
++    pb = xgu_set_fog_plane(pb, 0.0f, 0.0f, -1.0f, 0.0f);
+     pb_end(pb);
+
+     /* --- Table 6.18: Pixel store --- */
+diff --git a/gles_fog.c b/gles_fog.c
+--- a/gles_fog.c
++++ b/gles_fog.c
+@@ -136,7 +136,8 @@
+         // Atomically emit all fog state and final combiner, matching lazy.cpp:565-606
+         pb = xgu_set_fog_gen_mode(pb, gen_mode);
+         if (gen_mode == XGU_FOG_GEN_MODE_PLANAR) {
+-            pb = xgu_set_fog_plane(pb, 0.0f, 0.0f, 1.0f, 0.0f);
++            // Convert OpenGL eye-space Z to positive forward distance.
++            pb = xgu_set_fog_plane(pb, 0.0f, 0.0f, -1.0f, 0.0f);
+         }
+         pb = xgu_set_fog_enable(pb, true);
+         pb = xgu_set_fog_mode(pb, gliEnumToNvFogMode(cs->fog_mode));
