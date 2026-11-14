@@ -13,6 +13,38 @@ RUN apt-get update && apt-get install -y \
 
 RUN python3 -m pip install textual==7.5.0 --ignore-installed --break-system-packages
 
+FROM --platform=linux/amd64 free60/libxenon@sha256:6612a82ac5a9ce23ec5d873693bf8fa875caca4dffeb9e80707c79cd82d9fed4 AS xbox360-sdk
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    git clone https://github.com/xenosworks/xenos-toolchain.git /opt/xenos-toolchain && \
+    cd /opt/xenos-toolchain && git checkout 2fd99ee55610f0e48f2d408909dba9f4e3bb1d3c && \
+    rm -rf .git && \
+    git clone https://github.com/lieff/minimp3.git /opt/minimp3 && \
+    cd /opt/minimp3 && git checkout ea99364f61c14656440e8d77e9c233ccf3124633 && rm -rf .git
+
+FROM --platform=linux/amd64 ubuntu:24.04 AS xenon
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates libfmt-dev python3 dosfstools mtools && rm -rf /var/lib/apt/lists/*
+RUN git clone --filter=blob:none https://github.com/xenon-emu/xenon.git /tmp/xenon && \
+    cd /tmp/xenon && git checkout 0284bbe6c8125935d97bf54ab3132089c6c65c8b && \
+    git submodule update --init Deps/ThirdParty/asmjit Deps/ThirdParty/toml11 Deps/ThirdParty/microprofile Deps/ThirdParty/plusaes && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGFX_ENABLED=OFF -DCMAKE_EXE_LINKER_FLAGS='-flto=1 -Wl,-rpath,/opt/xenon/lib'
+RUN cmake --build /tmp/xenon/build -j1
+RUN mkdir -p /opt/xenon/lib && \
+    cp /tmp/xenon/build/Xenon /opt/xenon/Xenon && strip /opt/xenon/Xenon && \
+    cp -L /usr/lib/x86_64-linux-gnu/libfmt.so.* /opt/xenon/lib/ && \
+    cp /tmp/xenon/LICENSE /opt/xenon/ && rm -rf /tmp/xenon
+
+FROM xbox360-sdk AS xbox360-tools
+RUN apt-get update && apt-get install -y --no-install-recommends make glslang-tools dosfstools mtools && rm -rf /var/lib/apt/lists/*
+ENV XENON_BIN=/opt/xenon/Xenon
+COPY --from=xenon /opt/xenon/ /opt/xenon/
+ENV DEVKITXENON=/usr/local/xenon
+ENV XOST_DIR=/opt/xenos-toolchain
+ENV MINIMP3_DIR=/opt/minimp3
+RUN xenon-gcc --version
+COPY scripts/build-vril.sh /usr/local/bin/build-vril
+
 FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS ps4-shaders
 
 ARG BUILDARCH
@@ -485,6 +517,12 @@ ENV PATH="/opt/nxdk/bin:${PATH}"
 COPY --from=xbox /opt/nxdk/ /opt/nxdk/
 COPY --from=xbox /opt/nxdk-gles11/ /opt/nxdk-gles11/
 COPY --from=xbox /opt/minimp3/ /opt/minimp3/
+COPY --from=xbox360-sdk /usr/local/xenon/ /usr/local/xenon/
+COPY --from=xbox360-sdk /opt/xenos-toolchain/ /opt/xenos-toolchain/
+ENV XENON_BIN=/opt/xenon/Xenon
+COPY --from=xenon /opt/xenon/ /opt/xenon/
+ENV DEVKITXENON=/usr/local/xenon
+ENV XOST_DIR=/opt/xenos-toolchain
 COPY --from=xemu /opt/xemu/ /opt/xemu/
 RUN apt-get update && apt-get install -y --no-install-recommends llvm bison flex && \
     rm -rf /var/lib/apt/lists/*

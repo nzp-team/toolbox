@@ -13,6 +13,7 @@ show_help() {
     echo "  linux-arm64"
     echo "  linux-armhf"
     echo "  xbox"
+    echo "  xbox360"
     echo "  ps2"
     echo "  ps4"
     echo "  psp"
@@ -84,6 +85,13 @@ case "$TARGET" in
         ;;
     xbox)
         MAKEFILE="Makefile.xbox"
+        ;;
+    xbox360)
+        if [ "$(uname -m)" != "x86_64" ]; then
+            echo "Xbox 360 builds require an amd64 Toolbox container." >&2
+            exit 1
+        fi
+        MAKEFILE="Makefile.xbox360"
         ;;
     ps2)
         MAKEFILE="Makefile.ps2"
