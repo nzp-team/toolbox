@@ -331,6 +331,8 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 FROM rpcs3 AS ps3-tools
 
+ARG TARGETARCH
+
 ENV PS3DEV=/usr/local/ps3dev
 ENV PSL1GHT=/usr/local/ps3dev
 ENV RPCS3_BIN=/opt/rpcs3/AppRun
@@ -340,9 +342,13 @@ COPY --from=ps3-sdk /usr/local/ps3dev/ /usr/local/ps3dev/
 COPY --from=ps3-sdk /opt/ps3/ /opt/ps3/
 COPY scripts/ /opt/scripts/
 COPY entrypoint.sh /entrypoint.sh
-RUN ppu-gcc --version && test -f "$PSL1GHT/ppu/lib/librsx.a" && \
+RUN test -f "$PSL1GHT/ppu/lib/librsx.a" && \
     test -f "$PS3DEV/portlibs/ppu/lib/libmpg123.a" && \
-    python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")' && \
+    if [ "$TARGETARCH" = amd64 ]; then \
+      ppu-gcc --version && \
+      python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")'; \
+    fi && \
+    /opt/rpcs3/AppRun --headless --version && \
     chmod +x /entrypoint.sh /opt/scripts/*.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
@@ -683,8 +689,10 @@ COPY --from=ps3-sdk /usr/local/ps3dev/ /usr/local/ps3dev/
 COPY --from=ps3-sdk /opt/ps3/ /opt/ps3/
 COPY --from=rpcs3 /opt/rpcs3/ /opt/rpcs3/
 
-RUN ppu-gcc --version && \
-    python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")' && \
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      ppu-gcc --version && \
+      python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")'; \
+    fi && \
     /opt/rpcs3/AppRun --headless --version
 
 ENV PCSX2_BIN=/opt/pcsx2/AppRun
