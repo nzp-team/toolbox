@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip python3.12-venv git bash jq build-essential binutils file xxd wget zip curl unzip libicu-dev \
     cmake libgl1-mesa-dev libglu1-mesa-dev libgl1-mesa-dri libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev libfontconfig1-dev libvulkan-dev libglew-dev \
     clang clang-tools lld glslang-tools cppcheck ffmpeg pandoc valgrind xauth xvfb pkg-config squashfs-tools \
-    ca-certificates libegl1 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0 \
+    ca-certificates libegl1 libopengl0 libgtk-3-0 libxcb-cursor0 libxkbcommon-x11-0 \
     mesa-vulkan-drivers vulkan-tools libvulkan1 libasound2t64 libpulse0 libudev1 \
     libx11-6 libxext6 libxrandr2 libxcursor1 libxi6 libxss1 libxtst6 libxkbcommon0 \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libdecor-0-0
@@ -278,6 +278,72 @@ COPY --from=xemu /opt/xemu/ /opt/xemu/
 COPY scripts/ /opt/scripts/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh /opt/scripts/*.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+FROM --platform=linux/amd64 ghcr.io/02900/ps3-toolchain@sha256:f35ed4eed798a49bbe4c99178916dbb04aaec4dafb8e0b43ebe118ddbfefaae6 AS ps3-sdk
+
+ADD https://developer.download.nvidia.com/cg/Cg_3.1/Cg-3.1_April2012_x86_64.tgz /tmp/cg.tgz
+RUN echo 'e8ff01e6cc38d1b3fd56a083f5860737dbd2f319a39037528fb1a74a89ae9878  /tmp/cg.tgz' | sha256sum -c - && \
+    mkdir -p /opt/ps3/lib && \
+    tar -xzf /tmp/cg.tgz -C /opt/ps3/lib --strip-components=3 ./usr/lib64/libCg.so && \
+    cp /lib/x86_64-linux-gnu/libcrypto.so.1.1 /opt/ps3/lib/ && \
+    mkdir -p /opt/ps3/licenses && cp /usr/share/doc/libssl1.1/copyright /opt/ps3/licenses/openssl && \
+    rm /tmp/cg.tgz
+
+FROM ubuntu:24.04 AS rpcs3
+
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 git make curl unzip ca-certificates xauth xvfb libstdc++6 libzstd1 \
+    mesa-vulkan-drivers vulkan-tools libvulkan1 libgl1 libegl1 libx11-6 libxext6 \
+    libxrandr2 libxcb-cursor0 libxkbcommon-x11-0 libasound2t64 libpulse0 libudev1 \
+    libfontconfig1 libfreetype6 libglib2.0-0t64 libdbus-1-3 libsm6 libice6 libxrender1 \
+    xz-utils && rm -rf /var/lib/apt/lists/*
+
+RUN case "$TARGETARCH" in \
+      amd64) arch=x86_64; suffix=linux64; repo=rpcs3-binaries-linux; image_sha=905e36b61eb4d4e1d9680e2cec8d149a7ef345123e36c4549a4d97624adc99c8; dwarfs_sha=4fd1e23a97d871d0536b818c11a58c58859627e347d10c1e211522c8dd56b328 ;; \
+      arm64) arch=aarch64; suffix=linux_aarch64; repo=rpcs3-binaries-linux-arm64; image_sha=f33a7ae793e000228d1fccbb6b0c0b20fb1060083528bc47ab0bd354f8a5cf27; dwarfs_sha=15867a3e1b5a310ea27700806ce7d504c912de8741dddbb40430eee419c4532f ;; \
+      *) exit 1 ;; \
+    esac && \
+    curl -fL --retry 3 -o /tmp/rpcs3.AppImage \
+      "https://github.com/RPCS3/${repo}/releases/download/build-05a9d96058229ebb82b3e1d2be762dc6ab6e4a50/rpcs3-v0.0.43-20604-05a9d960_${suffix}.AppImage" && \
+    echo "$image_sha  /tmp/rpcs3.AppImage" | sha256sum -c - && \
+    curl -fL --retry 3 -o /tmp/dwarfs.tar.xz \
+      "https://github.com/mhx/dwarfs/releases/download/v0.12.0/dwarfs-0.12.0-Linux-${arch}.tar.xz" && \
+    echo "$dwarfs_sha  /tmp/dwarfs.tar.xz" | sha256sum -c - && \
+    tar -xJf /tmp/dwarfs.tar.xz -C /tmp --strip-components=2 "dwarfs-0.12.0-Linux-${arch}/bin/dwarfsextract" && \
+    mkdir -p /opt/rpcs3 && \
+    /tmp/dwarfsextract --input /tmp/rpcs3.AppImage --output /opt/rpcs3 --image-offset auto && \
+    test -x /opt/rpcs3/AppRun && \
+    rm -f /tmp/rpcs3.AppImage /tmp/dwarfs.tar.xz /tmp/dwarfsextract
+
+ENV LANG=C.UTF-8
+RUN apt-get update && apt-get install -y --no-install-recommends libopengl0 ffmpeg && rm -rf /var/lib/apt/lists/* && \
+    /opt/rpcs3/AppRun --headless --version
+
+FROM rpcs3 AS rpcs3-tools
+ENV RPCS3_BIN=/opt/rpcs3/AppRun
+COPY scripts/ /opt/scripts/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /opt/scripts/*.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+FROM rpcs3 AS ps3-tools
+
+ENV PS3DEV=/usr/local/ps3dev
+ENV PSL1GHT=/usr/local/ps3dev
+ENV RPCS3_BIN=/opt/rpcs3/AppRun
+ENV LD_LIBRARY_PATH=/opt/ps3/lib
+ENV PATH="/usr/local/ps3dev/bin:/usr/local/ps3dev/ppu/bin:${PATH}"
+COPY --from=ps3-sdk /usr/local/ps3dev/ /usr/local/ps3dev/
+COPY --from=ps3-sdk /opt/ps3/ /opt/ps3/
+COPY scripts/ /opt/scripts/
+COPY entrypoint.sh /entrypoint.sh
+RUN ppu-gcc --version && test -f "$PSL1GHT/ppu/lib/librsx.a" && \
+    test -f "$PS3DEV/portlibs/ppu/lib/libmpg123.a" && \
+    python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")' && \
+    chmod +x /entrypoint.sh /opt/scripts/*.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
 FROM native AS ppsspp
@@ -607,6 +673,19 @@ RUN mkdir -p /opt/mingw-deps && \
       /tmp/SDL2-mingw.tar.gz /tmp/SDL2_mixer-mingw.tar.gz
 
 COPY --from=psp /opt/pspdev/ /opt/pspdev/
+
+ENV PS3DEV=/usr/local/ps3dev
+ENV PSL1GHT=/usr/local/ps3dev
+ENV RPCS3_BIN=/opt/rpcs3/AppRun
+ENV LD_LIBRARY_PATH=/opt/ps3/lib
+ENV PATH="/usr/local/ps3dev/bin:/usr/local/ps3dev/ppu/bin:${PATH}"
+COPY --from=ps3-sdk /usr/local/ps3dev/ /usr/local/ps3dev/
+COPY --from=ps3-sdk /opt/ps3/ /opt/ps3/
+COPY --from=rpcs3 /opt/rpcs3/ /opt/rpcs3/
+
+RUN ppu-gcc --version && \
+    python3 -c 'import ctypes; ctypes.CDLL("libCg.so"); ctypes.CDLL("libcrypto.so.1.1")' && \
+    /opt/rpcs3/AppRun --headless --version
 
 ENV PCSX2_BIN=/opt/pcsx2/AppRun
 COPY --from=pcsx2 /opt/pcsx2/ /opt/pcsx2/

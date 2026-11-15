@@ -15,6 +15,7 @@ show_help() {
     echo "  xbox"
     echo "  xbox360"
     echo "  ps2"
+    echo "  ps3"
     echo "  ps4"
     echo "  psp"
     echo "  3ds"
@@ -96,6 +97,14 @@ case "$TARGET" in
     ps2)
         MAKEFILE="Makefile.ps2"
         TARGET_ARGS=(MAKEFLAGS=)
+        ;;
+    ps3)
+        if [ "$(uname -m)" != "x86_64" ]; then
+            echo "PS3 builds require an amd64 Toolbox container." >&2
+            exit 1
+        fi
+        MAKEFILE="Makefile.ps3"
+        BUILD_GOALS=(pkg)
         ;;
     ps4)
         MAKEFILE="Makefile.ps4"
